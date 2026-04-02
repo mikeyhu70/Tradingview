@@ -1,0 +1,84 @@
+//@version=5
+indicator('Historical Bar Match 2024', overlay=true)
+y = input(1000, title='Lookback Bars')
+z = input(10, title="Bars to Show/Forecast")
+k = input(6, title="Matching Pattern Length")
+
+dash_loc = input.string('Mid Left', 'Dashboard Location', options=['Top Right', 'Bottom Right', 'Top Left', 'Mid Left', 'Mid Right'], group='Dashboard')
+text_size = input.string('Small', 'Dashboard Size', options=['Tiny', 'Small', 'Normal', 'Large'], group='Dashboard')
+
+txt_col = input(color.rgb(191, 194, 203),'Text/Frame Color' ,group='Dashboard')
+txt_col2 = input(color.rgb(17, 226, 226),'Text/Frame Color' ,group='Dashboard')
+
+get_bar_color(i) =>
+    if close[i] > close[i + 1]
+        'G'
+    else
+        'R'
+
+last_j_bars = array.new_string(k)
+last_j_dates = array.new_string(k)
+
+for i = 0 to k - 1
+    array.set(last_j_bars, i, get_bar_color(i))
+    //array.set(last_j_dates, i, str.tostring(time[i], "yyyy-MM-dd"))
+    array.set(last_j_dates, i, str.format("{0,date,yyyy-MM-dd}", time[i]))
+
+
+//Table
+var table_position = dash_loc == 'Top Left' ? position.top_left : dash_loc == 'Bottom Left' ? position.bottom_left : dash_loc == 'Top Right' ? position.top_right : dash_loc == 'Mid Left' ? position.middle_left : dash_loc == 'Mid Right' ? position.middle_right : position.bottom_right
+var table_text_size = text_size == 'Tiny' ? size.tiny : text_size == 'Small' ? size.small : text_size == 'Normal' ? size.normal : size.large
+
+  
+var table_id2 = table.new(table_position, 5, math.max(k,z)+1,border_color=txt_col,border_width=1 ,frame_color=txt_col,frame_width=1)
+table.cell(table_id2, 0, 0, 'S.Pattern', bgcolor=color.gray, text_color=txt_col, text_size=table_text_size)
+table.cell(table_id2, 1, 0, 'S.Bar', bgcolor=color.gray, text_color=txt_col, text_size=table_text_size)
+table.cell(table_id2, 2, 0, 'D.Match', bgcolor=color.gray, text_color=txt_col, text_size=table_text_size)
+table.cell(table_id2, 3, 0, 'D.Bar', bgcolor=color.gray, text_color=txt_col, text_size=table_text_size)
+
+
+
+if barstate.islast
+    for i = 0 to k-1 by 1
+        m = array.get(last_j_dates, i)
+        table.cell(table_id2, 0, i + 1, m, text_color=txt_col, text_size=table_text_size)
+        //table.cell(table_id2, 0, i + 1, str.format("{0,date,yyyy-MM-dd}",m),bgcolor=color.gray, text_color=color.white)
+        table.cell(table_id2, 1, i + 1, array.get(last_j_bars, i),text_color=txt_col,text_size=table_text_size, bgcolor=color.new(array.get(last_j_bars, i) == 'G' ? color.green : color.red, 50))
+
+match_found = false
+match_dates = array.new_string(z)
+match_prices = array.new_float(z)
+var match_bar_index = 0
+
+
+if barstate.islast
+    for i = k to y
+        match = true
+        for j = 0 to k - 1
+            if get_bar_color(i + j) != array.get(last_j_bars, j)
+                match := false
+                break
+        if match
+            match_found := true
+            match_bar_index := i
+            for m = 0 to k - 1
+                array.set(match_dates, m, str.format("{0,date,yyyy-MM-dd}", time[i + m]))
+                array.set(match_prices, m, close[i + m - k])
+            break
+
+    for i = 0 to k-1 by 1
+        m = array.get(last_j_dates, i)
+        table.cell(table_id2, 0, i + 1, m, text_color=txt_col, text_size=table_text_size)
+        table.cell(table_id2, 1, i + 1, array.get(last_j_bars, i), bgcolor=color.new(array.get(last_j_bars, i) == 'G' ? color.green : color.red, 50),text_size=table_text_size)
+
+    if match_found
+        table.cell(table_id2, 4, 0, str.tostring(match_bar_index) + ' (' + str.tostring(close[match_bar_index]) + ')', bgcolor=color.gray, text_color=txt_col2, text_size=table_text_size)
+        for i = 0 to k - 1
+            table.cell(table_id2, 2, i+1,  str.format("{0,date,yyyy-MM-dd}",time[match_bar_index+i]), bgcolor=color.gray, text_color=txt_col, text_size=table_text_size)  
+            table.cell(table_id2, 3, i+1,  get_bar_color(match_bar_index+i), bgcolor=color.new(get_bar_color(match_bar_index+i) == 'G' ? color.green : color.red, 50), text_size=table_text_size) 
+            //table.cell(table_id2, 2, i+1,  array.get(match_dates, i), bgcolor=color.gray, text_color=color.white)
+            //table.cell(table_id2, 3, i+1, str.tostring(array.get(match_prices, i)), bgcolor=color.gray, text_color=color.white)
+        for t = 0 to z- 1
+            table.cell(table_id2, 4, t+1, str.tostring(close[match_bar_index-t-1]), bgcolor=color.gray, text_color=txt_col2, text_size=table_text_size)
+    else
+        table.cell(table_id2, 4, 0, '_', bgcolor=color.gray, text_color=txt_col, text_size=table_text_size)

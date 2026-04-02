@@ -1,0 +1,51 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © congacindy
+
+//@version=5
+indicator("Tom DeMark 9 and 13 Buy/Sell Signals", overlay=true)
+
+// Input parameters
+lookback = input.int(50, "Lookback Period", minval=1)
+
+// Function to calculate the TD Sequential count
+td_sequential(source, lookback) =>
+    var count = 0
+    var signal = ""
+    
+    for i = 0 to lookback - 1
+        if source[i] > source[i + 4]
+            count := count == 0 ? 1 : count + 1
+            if count == 9
+                signal := "Buy"
+            else if count == 13
+                signal := "Sell"
+        else
+            count := 0
+            signal := ""
+    
+    [count, signal]
+
+// Calculate TD Sequential counts for high and low
+[td_high_count, td_high_signal] = td_sequential(high, lookback)
+[td_low_count, td_low_signal] = td_sequential(low, lookback)
+
+// Plot signals and counts
+plotshape(td_high_signal == "Buy", title="TD Buy", location=location.abovebar, style=shape.triangleup, size=size.small, color=color.green)
+plotshape(td_high_signal == "Sell", title="TD Sell", location=location.abovebar, style=shape.triangledown, size=size.small, color=color.red)
+
+plotshape(td_low_signal == "Buy", title="TD Buy", location=location.belowbar, style=shape.triangleup, size=size.small, color=color.green)
+plotshape(td_low_signal == "Sell", title="TD Sell", location=location.belowbar, style=shape.triangledown, size=size.small, color=color.red)
+
+// Print current counts if no signal
+var label td_high_label = na
+var label td_low_label = na
+
+if barstate.islast and td_high_signal == ""
+    td_high_label := label.new(bar_index, high, str.tostring(td_high_count), style=label.style_none, textcolor=color.gray, size=size.small)
+else
+    label.delete(td_high_label)
+
+if barstate.islast and td_low_signal == ""
+    td_low_label := label.new(bar_index, low, str.tostring(td_low_count), style=label.style_none, textcolor=color.gray, size=size.small)
+else
+    label.delete(td_low_label)

@@ -1,0 +1,893 @@
+//@version=4
+
+// Mar-16-2021: Improved plot forward/backward cycle length from the search of last low based on fld2 (more to the left)
+// Mar-16-2021: Chanage function to get working days from cycle length
+// Mar-16-2021: Add function to MA of series of integer instead of constant length
+
+study(title="FLD with Projection Simple V2", overlay=true, max_labels_count=500)
+
+src = input(title="Source", type=input.source, defval=hl2)
+delay = input(title="Delay(must be less than Period)", type=input.integer, defval=0, minval=0)
+var plot_raw = input(defval = false, title = "Plot Raw instead of smooted?", type = input.bool)
+var plot_consistent_period = input(defval = true, title = "Plot Consistent FLD Period?", type = input.bool)
+
+fld0_hide = input(title="Hide FLD0?", defval=false)
+mode_fld0 = input(title="Auto FLD #0 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period0 = input(title="FLD TF Period #0", defval=5.0)
+fld0_hist_bar = input(defval = 3.75, title = "Number of FLD #0 Cycles to Display?", minval=0.05, type = input.float)
+mode_multiplier0 = input(title="FLD #0 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier0 = input(title="FLD #0 Bars in TF Period", defval=1)
+Transp0 = input(title="Transparency Period #0", defval=85, minval=0, maxval=100)
+Width0 = input(title="Line Width Period #0", defval=1, minval=1, maxval=4)
+offset_len0= input(title="Label Offset FLD 0", defval=1)
+smooth_len0= input(title="MA Smooth Len #0", defval=1)
+period0 = input(title="Period for Though Search FLD0", type=input.integer, defval=10, minval=0)
+
+fld_hide = input(title="Hide FLD1?", defval=false)
+mode_fld = input(title="Auto FLD #1 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period = input(title="FLD TF Period #1", defval=10.0)
+fld_hist_bar = input(defval = 5.25, title = "Number of FLD #1 Cycles to Display?", minval=0.05, type = input.float)
+mode_multiplier = input(title="FLD #1 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier = input(title="FLD #1 Bars in TF Period", defval=1)
+Transp = input(title="Transparency Period #1", defval=30, minval=0, maxval=100)
+Width = input(title="Line Width Period #1", defval=1, minval=1, maxval=4)
+offset_len1= input(title="Label Offset FLD 1", defval=5)
+smooth_len= input(title="MA Smooth Len #1", defval=3)
+period1 = input(title="Period for Though Search FLD1", type=input.integer, defval=10, minval=0)
+
+fld2_hide = input(title="Hide FLD2?", defval=false)
+mode_fld2 = input(title="Auto FLD #2 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period2 = input(title="FLD TF Period #2", defval=20.0)
+fld2_hist_bar = input(defval = 5.25, title = "Number of FLD #2 Cycles to Display?", minval=0.05, type = input.float)
+fld2a_hist_bar = input(defval = 10.5, title = "Number of FLD #2 Cycles to Display (Alternate)?", minval=1, type = input.float)
+mode_multiplier2 = input(title="FLD2 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier2 = input(title="FLD2 Bars in TF Period", defval=1)
+Transp2 = input(title="Transparency Period #2", defval=60, minval=0, maxval=100)
+Transp2a = input(title="Transparency Period #2 (Alternate)", defval=70, minval=0, maxval=100)
+Width2 = input(title="Line Width Period #2", defval=2, minval=1, maxval=4)
+Width2a = input(title="Line Width Period #2 (Alternate)", defval=1, minval=1, maxval=4)
+offset_len2= input(title="Label Offset FLD 2", defval=5)
+smooth_len2= input(title="MA Smooth Len #2", defval=3)
+period2 = input(title="Period for Though Search FLD2", type=input.integer, defval=10, minval=0)
+
+fld3_hide = input(title="Hide FLD3?", defval=true)
+mode_fld3 = input(title="Auto FLD #3 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period3 = input(title="FLD TF Period #3", defval=40.0)
+fld3_hist_bar = input(defval = 10.25, title = "Number of FLD #3 Cycles to Display?", minval=0.05, type = input.float)
+fld3a_hist_bar = input(defval = 15.50, title = "Number of FLD #3 Cycles to Display (Alternate)?", minval=1, type = input.float)
+mode_multiplier3 = input(title="FLD3 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier3 = input(title="FLD3 Bars in TF Period", defval=1)
+Transp3 = input(title="Transparency Period #3", defval=30, minval=0, maxval=100)
+Transp3a = input(title="Transparency Period #3 (Alternate)", defval=70, minval=0, maxval=100)
+Width3 = input(title="Line Width Period #3", defval=2, minval=2, maxval=4)
+Width3a = input(title="Line Width Period #3 (Alternate)", defval=1, minval=1, maxval=4)
+offset_len3= input(title="Label Offset FLD 3", defval=5)
+smooth_len3= input(title="MA Smooth Len #3", defval=3)
+period3 = input(title="Period for Though Search FLD3", type=input.integer, defval=10, minval=0)
+
+fld4_hide = input(title="Hide FLD4?", defval=false)
+mode_fld4 = input(title="Auto FLD #4 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period4 = input(title="FLD TF Period #4", defval=80.0)
+fld4_hist_bar = input(defval = 20.25, title = "Number of FLD #4 Cycles to Display?", minval=0.05, type = input.float)
+mode_multiplier4 = input(title="FLD4 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier4 = input(title="FLD4 Bars in TF Period", defval=1)
+Transp4 = input(title="Transparency Period #4", defval=60, minval=0, maxval=100)
+Width4 = input(title="Line Width Period #4", defval=3, minval=1, maxval=4)
+offset_len4= input(title="Label Offset FLD 4", defval=5)
+smooth_len4= input(title="MA Smooth Len #4", defval=3)
+period4 = input(title="Period for Though Search FLD4", type=input.integer, defval=10, minval=0)
+
+fld5_hide = input(title="Hide FLD5?", defval=true)
+mode_fld5 = input(title="Auto FLD #5 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period5 = input(title="FLD TF Period #5", defval=140.0)
+fld5_hist_bar = input(defval = 20.25, title = "Number of FLD #5 Cycles to Display?", minval=0.05, type = input.float)
+mode_multiplier5 = input(title="FLD5 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier5 = input(title="FLD5 Bars in TF Period", defval=1)
+Transp5 = input(title="Transparency Period #5", defval=30, minval=0, maxval=100)
+Width5 = input(title="Line Width Period #5", defval=3, minval=1, maxval=4)
+offset_len5= input(title="Label Offset FLD 5", defval=5)
+smooth_len5= input(title="MA Smooth Len #5", defval=3)
+period5 = input(title="Period for Though Search FLD5", type=input.integer, defval=10, minval=0)
+
+fld6_hide = input(title="Hide FLD6?", defval=true)
+mode_fld6 = input(title="Auto FLD #6 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period6 = input(title="FLD TF Period #6", defval=280.0)
+fld6_hist_bar = input(defval = 20.25, title = "Number of FLD #6 Cycles to Display?", minval=0.05, type = input.float)
+mode_multiplier6 = input(title="FL6 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier6 = input(title="FLD6 Bars in TF Period", defval=1)
+Transp6 = input(title="Transparency Period #6", defval=60, minval=0, maxval=100)
+Width6 = input(title="Line Width Period #6", defval=4, minval=1, maxval=4)
+offset_len6= input(title="Label Offset FLD 6", defval=5)
+smooth_len6= input(title="MA Smooth Len #6", defval=3)
+period6 = input(title="Period for Though Search FLD4", type=input.integer, defval=10, minval=0)
+
+fld7_hide = input(title="Hide FLD7?", defval=true)
+mode_fld7 = input(title="Auto FLD #7 Setting?", defval='Auto', options=['Auto', 'Manual'])
+Period7 = input(title="FLD TF Period #7", defval=548.0)
+fld7_hist_bar = input(defval = 20.25, title = "Number of FLD #7 Cycles to Display?", minval=0.05, type = input.float)
+mode_multiplier7 = input(title="FLD7 Auto Multiplier?", defval='Auto', options=['Auto', 'Manual'])
+Multiplier7 = input(title="FLD7 Bars in TF Period", defval=1)
+Transp7 = input(title="Transparency Period #7", defval=30, minval=0, maxval=100)
+Width7 = input(title="Line Width Period #7", defval=4, minval=1, maxval=4)
+offset_len7= input(title="Label Offset FLD 7", defval=5)
+smooth_len7= input(title="MA Smooth Len #7", defval=3)
+period7 = input(title="Period for Though Search FLD7", type=input.integer, defval=10, minval=0)
+
+instrument_type = syminfo.type
+
+auto_fld0 = timeframe.period == 'M' ? 20.0 : timeframe.period == 'W' ? 10.0 : 
+   timeframe.period == 'D' ? 5.0 : timeframe.period == '240' ? 2.0 : timeframe.period == '120' ? 1.0 : 
+   timeframe.period == '60' ? 1.0 : timeframe.period == '30' ? 0.20 : 
+   timeframe.period == '15' ? 0.20 : timeframe.period == '10' ? 0.10 : timeframe.period == '5' ? 0.10 : 5.0
+   
+_auto_fld0 = mode_fld0 == 'Auto' ? auto_fld0 : Period0
+
+
+auto_fld = timeframe.period == 'M' ? 40.0 : timeframe.period == 'W' ? 20.0 : 
+   timeframe.period == 'D' ? 10.0 : timeframe.period == '240' ? 5.0 : timeframe.period == '120' ? 2.0 : 
+   timeframe.period == '60' ? 2.0 : timeframe.period == '30' ? 1.0 : 
+   timeframe.period == '15' ? 1.0 : timeframe.period == '10' ? 0.20 : timeframe.period == '5' ? 0.20 : 10.0
+   
+_auto_fld = mode_fld == 'Auto' ? auto_fld : Period
+
+
+auto_fld2 = timeframe.period == 'M' ? 80.0 : timeframe.period == 'W' ? 40.0 : 
+   timeframe.period == 'D' ? 20.0 : timeframe.period == '240' ? 10.0 : timeframe.period == '120' ? 5.0 : 
+   timeframe.period == '60' ? 5.0 : timeframe.period == '30' ? 2.0 : 
+   timeframe.period == '15' ? 2.0 : timeframe.period == '10' ? 1.00 : timeframe.period == '5' ? 1.00 : 20.0
+   
+_auto_fld2 = mode_fld2 == 'Auto' ? auto_fld2 : Period2
+
+auto_fld3 = timeframe.period == 'M' ? 140.0 : timeframe.period == 'W' ? 80.0 : 
+   timeframe.period == 'D' ? 40.0 : timeframe.period == '240' ? 20.0 : timeframe.period == '120' ? 10.0 : 
+   timeframe.period == '60' ? 10.0 : timeframe.period == '30' ? 5.0 : 
+   timeframe.period == '15' ? 5.0 : timeframe.period == '10' ? 2.0 : timeframe.period == '5' ? 2.0 : 40.0
+   
+_auto_fld3 = mode_fld3 == 'Auto' ? auto_fld3 : Period3
+
+auto_fld4 = timeframe.period == 'M' ? 280.0 : timeframe.period == 'W' ? 140.0 : 
+   timeframe.period == 'D' ? 80.0 : timeframe.period == '240' ? 40.0 : timeframe.period == '120' ? 20.0 : 
+   timeframe.period == '60' ? 20.0 : timeframe.period == '30' ? 10.0 : 
+   timeframe.period == '15' ? 10.0 : timeframe.period == '10' ? 5.0 : timeframe.period == '5' ? 5.0 : 80.0
+   
+_auto_fld4 = mode_fld4 == 'Auto' ? auto_fld4 : Period4
+
+auto_fld5 = timeframe.period == 'M' ? 548.0 : timeframe.period == 'W' ? 280.0 : 
+   timeframe.period == 'D' ? 140.0 : timeframe.period == '240' ? 80.0 : timeframe.period == '120' ? 40.0 : 
+   timeframe.period == '60' ? 40.0 : timeframe.period == '30' ? 20.0 : 
+   timeframe.period == '15' ? 20.0 : timeframe.period == '10' ? 10.0 : timeframe.period == '5' ? 10.0: 140.0
+   
+_auto_fld5 = mode_fld5 == 'Auto' ? auto_fld5 : Period5
+
+auto_fld6 = timeframe.period == 'M' ? 1643.0 : timeframe.period == 'W' ? 548.0 : 
+   timeframe.period == 'D' ? 280.0 : timeframe.period == '240' ? 140.0 : timeframe.period == '120' ? 80.0 : 
+   timeframe.period == '60' ? 80.0 : timeframe.period == '30' ? 40.0 : 
+   timeframe.period == '15' ? 40.0 : timeframe.period == '10' ? 20.0 : timeframe.period == '5' ? 20.0 : 280.0
+   
+_auto_fld6 = mode_fld6 == 'Auto' ? auto_fld6 : Period6
+
+auto_fld7 = timeframe.period == 'M' ? 3285.0 : timeframe.period == 'W' ? 1643.0 : 
+   timeframe.period == 'D' ? 548.0 : timeframe.period == '240' ? 280.0 : timeframe.period == '120' ? 140.0 : 
+   timeframe.period == '60' ? 140.0: timeframe.period == '30' ? 80.0 : 
+   timeframe.period == '15' ? 80.0 : timeframe.period == '10' ? 40.0 : timeframe.period == '5' ? 40.0 : 548.0
+   
+_auto_fld7 = mode_fld7 == 'Auto' ? auto_fld7 : Period7
+
+auto_multiplier_stock = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 6.5/(timeframe.multiplier/60)
+auto_multiplier_stock_extended = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 16/(timeframe.multiplier/60)-1
+auto_multiplier_others = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 22/(timeframe.multiplier/60)
+
+//auto_multiplier_stock = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 1 : 6.5/(timeframe.multiplier/60)
+//auto_multiplier_others = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 1 : 22/(timeframe.multiplier/60)
+
+//plot (timeframe.multiplier)
+
+_auto_multiplier0 = mode_multiplier0 == 'Manual' ? Multiplier0 : instrument_type == "stock" and mode_multiplier0 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier = mode_multiplier == 'Manual' ? Multiplier : instrument_type == "stock" and mode_multiplier == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier2 = mode_multiplier2 == 'Manual' ? Multiplier2 : instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier3 = mode_multiplier3 == 'Manual' ? Multiplier3 : instrument_type == "stock" and mode_multiplier3 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier4 = mode_multiplier4 == 'Manual' ? Multiplier4 : instrument_type == "stock" and mode_multiplier4 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier5 = mode_multiplier5 == 'Manual' ? Multiplier5 : instrument_type == "stock" and mode_multiplier5 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier6 = mode_multiplier6 == 'Manual' ? Multiplier6 : instrument_type == "stock" and mode_multiplier6 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier7 = mode_multiplier7 == 'Manual' ? Multiplier7 : instrument_type == "stock" and mode_multiplier7 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock :  instrument_type == "stock" and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ?  auto_multiplier_stock_extended : auto_multiplier_others
+
+
+//plot (_auto_fld2)
+
+// -- MA of series of Integer
+
+Sum(src,p) => a = cum(src), a - a[max(p,0)]
+
+Sma(src,p) => a = cum(src), (a - a[max(p,0)])/max(p,0)
+
+Ema(src,p) =>
+    ema = 0.
+    sf = 2/(p+1)
+    ema := nz(ema[1] + sf*(src - ema[1]),src)
+
+Wma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), (mp*a - Sum(a[1],p))/denom
+    
+Hma(src, len) => Wma(2*Wma(src, len/2)-Wma(src, len), round(sqrt(len)))
+
+Lsma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), b = (mp*a - Sum(a[1],p))/denom
+    3*b - 2*(a - a[mp])/mp
+
+Variance(src,p) => p == 1 ? 0 : Sma(src*src,p) - pow(Sma(src,p),2)
+
+Stdev(src,p) => p == 1 ? 0 : sqrt(Sma(src*src,p) - pow(Sma(src,p),2)) 
+
+Atr(p) =>
+    atr = 0.
+    Tr = max(high,close[1]) - min(low,close[1])
+    atr := nz(atr[1] + (Tr - atr[1])/p,Tr)
+
+Covariance(x,y,p) => Sma(x*y,p) - Sma(x,p)*Sma(y,p)
+
+Correlation(x,y,p) => Covariance(x,y,p)/(Stdev(x,p)*Stdev(y,p))
+
+// -- Custom MA 
+
+nma(src, length1, length2) =>
+    lambda = length1 / length2
+	alpha = lambda * (length1 - 1) / (length1 - lambda)
+	ma1 = Ema(src, length1)
+	ma2 = Ema(ma1, length2)
+	nma = (1 + alpha) * ma1 - alpha * ma2
+	
+dema(src, len) => 
+    ma1 = Ema(src, len)
+    ma2 = Ema(ma1, len)
+    2 * ma1 - ma2
+    
+eTma(_src, _len) =>
+    _tma = Ema(Ema(_src, _len), _len)
+    
+tma(_src, _len) =>
+  _tma = Sma(Sma(_src, _len), _len)
+    
+noma(_src,_len) =>
+    _noma = _src
+
+tema(src, len) => 
+    ma1 = Ema(src, len)
+    ma2 = Ema(ma1, len)
+    ma3 = Ema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tdema(src, len) => 
+    ma1 = dema(src, len)
+    ma2 = dema(ma1, len)
+    ma3 = dema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+ttema(src, len) => 
+    ma1 = tema(src, len)
+    ma2 = tema(ma1, len)
+    ma3 = tema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tnma(src, len) => 
+    ma1 = nma(src, len, 3)
+    ma2 = nma(ma1, len, 3)
+    ma3 = nma(ma2, len, 3)
+    //4 * (ma1 - ma3) + ma3
+    3 * (ma1 - ma3) + ma3
+
+thma(src, len) => 
+    ma1 = Hma(src, len)
+    ma2 = Hma(ma1, len)
+    ma3 = Hma(ma2, len)
+    3 * (ma1 - ma2) + ma3
+    
+zlema(src, len) =>
+	lag = round((len - 1) / 2)
+	zlsrc = src + (src - src[lag])
+	Ema(zlsrc, len)
+
+zldema(src, len) =>
+	lag = round((len - 1) / 2)
+	zlsrc = src + (src - src[lag])
+	dema(zlsrc, len)
+	
+zltema(src, len) =>
+	lag = round((len - 1) / 2)
+	zlsrc = src + (src - src[lag])
+	tema(zlsrc, len)
+	
+dzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    2 * ma1 - ma2
+
+tzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+    
+//qzlema(src, len) => 
+//    ma1 = zlema(src, len)
+//    ma2 = zlema(ma1, len)
+//    ma3 = zlema(ma2, len)
+//    ma4 = zlema(ma3, len)
+//    3 * (ma2 - ma3) + ma4
+    
+qzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    ma4 = zlema(ma3, len)
+    2 * (ma1 - ma2) + 2 * (ma2 - ma3) + ma4
+
+llema(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	Ema(srcnew, len)
+	
+llsma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	Sma(srcnew, len)
+	
+llhma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	Hma(srcnew, len)
+	
+llwma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	Wma(srcnew, len)
+	
+llrma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	rma(srcnew, len)
+	
+lltema(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	tema(srcnew, len)
+	
+// -- Functions
+
+//PriceFormat() => syminfo.mintick <= 0.00001 ? "0.00000" : 
+//   syminfo.mintick <= 0.0001 ? "0.0000" : 
+//   syminfo.mintick <= 0.001 ? "0.000" : 
+//   syminfo.mintick <= 0.01 ? "0.00" : 
+//   syminfo.mintick <= 0.1 ? "0.0" : "0"
+
+PriceFormat() => syminfo.mintick <= 0.00001 ? "0" : 
+   syminfo.mintick <= 0.0001 ? "0" : 
+   syminfo.mintick <= 0.001 ? "0" : 
+   syminfo.mintick <= 0.01 ? "0" : 
+   syminfo.mintick <= 0.1 ? "0" : "0"
+   
+PriceFormat2() => syminfo.mintick <= 0.00001 ? "0.0" : 
+   syminfo.mintick <= 0.0001 ? "0.0" : 
+   syminfo.mintick <= 0.001 ? "0.0" : 
+   syminfo.mintick <= 0.01 ? "0.0" : 
+   syminfo.mintick <= 0.1 ? "0.0" : "0.0"
+
+f_resInMinutes() => 
+    _resInMinutes = timeframe.multiplier * (
+      timeframe.isseconds ? 1. / 60             :
+      timeframe.isminutes ? 1.                  :
+      timeframe.isdaily   ? 60. * 24            :
+      timeframe.isweekly  ? 60. * 24 * 7        :
+      timeframe.ismonthly ? 60. * 24 * 30.4375  : na)
+
+f_timeFrom(_from, _qty, _units) =>
+    // _from  : starting time from where the offset is calculated: "bar" to start from the bar's starting time, "close" to start from the bar's closing time, "now" to start from the current time.
+    // _qty   : the +/- qty of _units of offset required. A "series float" can be used but it will be cast to a "series int".
+    // _units : string containing one of the seven allowed time units: "chart" (chart's resolution), "seconds", "minutes", "hours", "days", "months", "years".
+    // Dependency: f_resInMinutes().
+    int _timeFrom = na
+    // Remove any "s" letter in the _units argument, so we don't need to compare singular and plural unit names.
+    _unit = str.replace_all(_units, "s", "")
+    // Determine if we will calculate offset from the bar's time or from current time.
+    _t = _from == "bar" ? time : _from == "close" ? time_close : timenow
+    // Calculate time at offset.
+    if _units == "chart"
+        // Offset in chart res multiples.
+        _timeFrom := int(_t + (f_resInMinutes() * 60 * 1000 * _qty))
+    else
+        // Add the required _qty of time _units to the _from starting time.
+        _year   = year(_t)       + (_unit == "year"   ? int(_qty) : 0)
+        _month  = month(_t)      + (_unit == "month"  ? int(_qty) : 0)
+        _day    = dayofmonth(_t) + (_unit == "day"    ? int(_qty) : 0)
+        _hour   = hour(_t)       + (_unit == "hour"   ? int(_qty) : 0)
+        _minute = minute(_t)     + (_unit == "minute" ? int(_qty) : 0)
+        _second = second(_t)     + (_unit == "econd"  ? int(_qty) : 0)
+        // Return the resulting time in ms Unix time format.
+        _timeFrom := timestamp(_year, _month, _day, _hour, _minute, _second)
+        
+f_calc_bar_time(offset) => ret = time + ((time-time[1]) * offset)
+
+f_DaysBetween(t1, t2) => ceil((t1 - t2) / 86400000)+ 1
+
+f_offsetTime(_userOffsetInput) =>
+
+    // init our _return variable
+    var int _return = na
+
+    // get current time
+    int _timeNow    = time
+
+    // get difference between current bar time and previous bar time
+    int _timeSeg    = time - time[1]
+
+    // multiply the segment by the user input
+    int _segMult    = _timeSeg * _userOffsetInput
+
+    // return time now + multiplied time segment for offset, giving us our
+    // +1|2|3 etc. OR -1|2|3 location depending on user input.
+    _return := _timeNow + _segMult
+
+
+f_weekdays(_len_in) => 
+    int _day = 0
+    float _rem = 0
+    float _ret = 0
+    var int _return = na
+    
+    _len = ceil(_len_in)
+    
+    _day:= floor(_len/7)*5
+    _rem:= _len - _day -2*floor(_len/7)
+    if (_rem <= 6) and (_rem >= 5)
+        _ret := _day + _rem
+    else if (_rem == 4) 
+        if (dayofweek == 4)
+            _ret := _day + _rem  // no weekends overlap
+        else if (dayofweek == 3)
+            _ret := _day +_rem - 1
+        else if (dayofweek == 2)
+            _ret := _day +_rem - 2
+        else if (dayofweek == 1)
+            _ret := _day +_rem - 2
+        else
+            _ret := _day + _rem
+    else if (_rem == 3)
+        if (dayofweek == 3)
+            _ret := _day + _rem // no weekends overlap
+        else if (dayofweek == 2)
+            _ret := _day + _rem - 1
+        else if (dayofweek == 1)
+            _ret := _day + _rem - 2
+        else
+            _ret := _day + _rem
+    else if (_rem == 2)
+        if (dayofweek ==2)
+            _ret := _day + _rem //no weekends overlap
+        else if (dayofweek == 1)
+            _ret := _day +_rem - 1
+        else
+            _ret := _day + _rem
+    else
+        _ret := _day + _rem
+        
+    if (_len < 1)
+        _ret := _len
+        
+    _return := abs(ceil(_ret))
+    
+f_bars_to_day(_len_in) => 
+    int _day = 0
+    float _rem = 0
+    float _ret = 0
+    var int _return = na
+    
+    _len = ceil(_len_in)
+    
+    _day:= floor(_len/5)
+    _rem:= _len - 5*_day
+    if (_rem == 4) 
+        if (dayofweek == 4)
+            _ret := _day*7 + _rem  // no weekends overlap
+        else if (dayofweek == 3)
+            _ret := _day*7 +_rem + 1
+        else if (dayofweek == 2)
+            _ret := _day*7 +_rem + 2
+        else if (dayofweek == 1)
+            _ret := _day*7 +_rem + 2
+        else
+            _ret := _day*7 + _rem
+    else if (_rem == 3)
+        if (dayofweek == 3)
+            _ret := _day*7 + _rem // no weekends overlap
+        else if (dayofweek == 2)
+            _ret := _day*7 + _rem + 1
+        else if (dayofweek == 1)
+            _ret := _day*7 + _rem + 2
+        else
+            _ret := _day*7 + _rem
+    else if (_rem == 2)
+        if (dayofweek ==2)
+            _ret := _day*7 + _rem //no weekends overlap
+        else if (dayofweek == 1)
+            _ret := _day*7 +_rem + 1
+        else
+            _ret := _day*7 + _rem
+    else
+        _ret := _day*7 + _rem
+        
+    if (_len < 1)
+        _ret := _len
+        
+    _return := abs(ceil(_ret)) + 1
+    
+//plot (f_weekdays(10), title = "test")
+//plot (f_bars_to_day(7.8), title = "test")
+//plot (dayofweek)
+
+// -- MAIN code
+
+//_auto_fld0_new = _auto_fld0 > 5 ? _auto_fld0 - 2*floor(_auto_fld0/7) : _auto_fld0 
+//_auto_fld_new = _auto_fld > 5 ? _auto_fld - 2*floor(_auto_fld/7) : _auto_fld 
+//_auto_fld2_new =  _auto_fld2  > 5 ? _auto_fld2 - 2*floor(_auto_fld2/7) :  _auto_fld2 
+//_auto_fld3_new =  _auto_fld3  > 5 ? _auto_fld3 - 2*floor(_auto_fld3/7) :  _auto_fld3 
+//_auto_fld4_new =  _auto_fld4  > 5 ? _auto_fld4 - 2*floor(_auto_fld4/7) :  _auto_fld4 
+
+
+_auto_fld0_new = 0.0
+_auto_fld_new = 0.0 
+_auto_fld1_new = 0.0
+_auto_fld2_new = 0.0
+_auto_fld3_new = 0.0
+_auto_fld4_new = 0.0
+_auto_fld5_new = 0.0
+_auto_fld6_new = 0.0
+_auto_fld7_new = 0.0
+
+
+if (timeframe.period == 'M') or (timeframe.period == 'W')
+    _auto_fld0_new :=  _auto_fld0 
+    _auto_fld_new :=   _auto_fld 
+    _auto_fld2_new :=  _auto_fld2 
+    _auto_fld3_new :=  _auto_fld3 
+    _auto_fld4_new :=  _auto_fld4 
+    _auto_fld5_new :=  _auto_fld5
+    _auto_fld6_new :=  _auto_fld6 
+    _auto_fld7_new :=  _auto_fld7
+else
+    if not plot_consistent_period
+        _auto_fld0_new := _auto_fld0 > 1 ? f_weekdays(_auto_fld0) : _auto_fld0
+        _auto_fld_new := _auto_fld > 1 ? f_weekdays(_auto_fld) : _auto_fld
+        _auto_fld2_new := _auto_fld2 > 1 ? f_weekdays(_auto_fld2) : _auto_fld2
+        _auto_fld3_new := _auto_fld3 > 1 ? f_weekdays(_auto_fld3) : _auto_fld3
+        _auto_fld4_new := _auto_fld4 > 1 ? f_weekdays(_auto_fld4) : _auto_fld4
+        _auto_fld5_new := _auto_fld5 > 1 ? f_weekdays(_auto_fld5) : _auto_fld5
+        _auto_fld6_new := _auto_fld6 > 1 ? f_weekdays(_auto_fld6) : _auto_fld6
+        _auto_fld7_new := _auto_fld7 > 1 ? f_weekdays(_auto_fld7) : _auto_fld7
+    else
+        _auto_fld0_new := _auto_fld0 > 1 ? (highest(f_weekdays(_auto_fld0),int(64*_auto_fld0)) + lowest(f_weekdays(_auto_fld0),int(64*_auto_fld0)))/2 : _auto_fld0
+        _auto_fld_new := _auto_fld > 1 ? (highest(f_weekdays(_auto_fld),int(64*_auto_fld)) + lowest(f_weekdays(_auto_fld),int(64*_auto_fld)))/2  : _auto_fld
+        _auto_fld2_new := _auto_fld2 > 1 ? (highest(f_weekdays(_auto_fld2),int(32*_auto_fld2)) + lowest(f_weekdays(_auto_fld2),int(32*_auto_fld2)))/2  : _auto_fld2
+        _auto_fld3_new := _auto_fld3 > 1 ? (highest(f_weekdays(_auto_fld3),int(32*_auto_fld3)) + lowest(f_weekdays(_auto_fld3),int(32*_auto_fld3)))/2  : _auto_fld3
+        _auto_fld4_new := _auto_fld4 > 1 ? (highest(f_weekdays(_auto_fld4),int(8*_auto_fld4)) + lowest(f_weekdays(_auto_fld4),int(8*_auto_fld4)))/2  : _auto_fld4
+        _auto_fld5_new := _auto_fld5 > 1 ? (highest(f_weekdays(_auto_fld5),int(8*_auto_fld5)) + lowest(f_weekdays(_auto_fld5),int(8*_auto_fld5)))/2  : _auto_fld5
+        _auto_fld6_new := _auto_fld6 > 1 ? (highest(f_weekdays(_auto_fld6),int(8*_auto_fld6)) + lowest(f_weekdays(_auto_fld6),int(8*_auto_fld6)))/2  : _auto_fld6
+        _auto_fld7_new := _auto_fld7 > 1 ? (highest(f_weekdays(_auto_fld7),int(8*_auto_fld7)) + lowest(f_weekdays(_auto_fld7),int(8*_auto_fld7)))/2  : _auto_fld7
+
+//plot(_auto_fld4_new)
+
+
+// -------------------------------------------------------
+// Data Source
+
+//max_bars_back(src, 4000)
+
+FLD0 = plot_raw ? src : zlema(src,smooth_len0)
+FLD1a = plot_raw ? src : zlema(src,smooth_len)
+FLD1b = src
+FLD = plot_raw ? FLD1b : FLD1a
+FLD2 = plot_raw ? src : zlema(src,smooth_len2)
+FLD3 = plot_raw ? src : zlema(src,smooth_len3)
+FLD4 = plot_raw ? src : zlema(src,smooth_len4)
+FLD5 = plot_raw ? src : zlema(src,smooth_len5)
+FLD6 = plot_raw ? src : zlema(src,smooth_len6)
+FLD7 = plot_raw ? src : zlema(src,smooth_len7)
+
+max_bars_back(FLD0, 2000)
+max_bars_back(FLD, 2000)
+max_bars_back(FLD2, 2000)
+max_bars_back(FLD3, 2000)
+max_bars_back(FLD4, 2000)
+max_bars_back(FLD5, 2000)
+max_bars_back(FLD6, 2000)
+max_bars_back(FLD7, 2000)
+
+fld18y = #5E0F0B
+fld9y = #DB241A
+fld54m = #D47A35
+fld18m = #C4B727
+fld40w = #62E322
+fld20w = #3C8A15
+fld80= #67A5A8
+fld40 = #161861
+fld20 = #9658E1
+fld10 = #D15C7B
+fld5 = #E386C2
+fld2 = #B80D18
+fld1 = #FF7F50
+fld5h = #FFB836
+fld0 = color.gray
+
+color_fld0 = _auto_fld0 > 5500 ? fld18y : _auto_fld0 > 2500  ? fld9y : 
+   _auto_fld0 > 1000  ? fld54m : _auto_fld0 > 400  ? fld18m : _auto_fld0 > 200  ? fld40w : 
+   _auto_fld0 > 100  ? fld20w : _auto_fld0 > 55  ? fld80 : 
+   _auto_fld0 > 25  ? fld40 : _auto_fld0 > 12  ? fld20 : _auto_fld0 > 7  ? fld10 : _auto_fld0 > 3.2  ? fld5: _auto_fld0 > 2  ? fld2 :  _auto_fld0 > 1  ? fld1 : _auto_fld0 > 0.15  ? fld5h : fld0
+
+color_fld1 = _auto_fld > 5500 ? fld18y : _auto_fld > 2500  ? fld9y : 
+   _auto_fld > 1000  ? fld54m : _auto_fld > 400  ? fld18m : _auto_fld > 200  ? fld40w : 
+   _auto_fld > 100  ? fld20w : _auto_fld > 55  ? fld80 : 
+   _auto_fld > 25  ? fld40 : _auto_fld > 12  ? fld20 : _auto_fld > 7  ? fld10 : _auto_fld > 3.2  ? fld5: _auto_fld > 2  ? fld2 :  _auto_fld > 1  ? fld1 : _auto_fld > 0.15  ? fld5h : fld0
+   
+color_fld2 = _auto_fld2 > 5500 ? fld18y : _auto_fld2 > 2500  ? fld9y : 
+   _auto_fld2 > 1000  ? fld54m : _auto_fld2 > 400  ? fld18m : _auto_fld2 > 200  ? fld40w : 
+   _auto_fld2 > 100  ? fld20w : _auto_fld2 > 55  ? fld80 : 
+   _auto_fld2 > 25  ? fld40 : _auto_fld2 > 12  ? fld20 : _auto_fld2 > 7  ? fld10 : _auto_fld2 > 3.2  ? fld5: _auto_fld2 > 2  ? fld2 :  _auto_fld2 > 1  ? fld1 : _auto_fld2 > 0.15  ? fld5h :fld0
+   
+color_fld3 = _auto_fld3 > 5500 ? fld18y : _auto_fld3 > 2500  ? fld9y : 
+   _auto_fld3 > 1000  ? fld54m : _auto_fld3 > 400  ? fld18m : _auto_fld3 > 200  ? fld40w : 
+   _auto_fld3 > 100  ? fld20w : _auto_fld3 > 55  ? fld80 : 
+   _auto_fld3 > 25  ? fld40 : _auto_fld3 > 12  ? fld20 : _auto_fld3 > 7  ? fld10 : _auto_fld3 > 3.2  ? fld5: _auto_fld3 > 2  ? fld2 :  _auto_fld3 > 1  ? fld1 : _auto_fld3 > 0.15  ? fld5h :fld0
+
+color_fld4 = _auto_fld4 > 5500 ? fld18y : _auto_fld4 > 2500  ? fld9y : 
+   _auto_fld4 > 1000  ? fld54m : _auto_fld4 > 400  ? fld18m : _auto_fld4 > 200  ? fld40w : 
+   _auto_fld4 > 100  ? fld20w : _auto_fld4 > 55  ? fld80 : 
+   _auto_fld4 > 25  ? fld40 : _auto_fld4 > 12  ? fld20 : _auto_fld4 > 7  ? fld10 : _auto_fld4 > 3.2  ? fld5: _auto_fld4 > 2  ? fld2 :  _auto_fld4 > 1  ? fld1 : _auto_fld4 > 0.15  ? fld5h :fld0
+
+color_fld5 = _auto_fld5 > 5500 ? fld18y : _auto_fld5 > 2500  ? fld9y : 
+   _auto_fld5 > 1000  ? fld54m : _auto_fld5 > 400  ? fld18m : _auto_fld5 > 200  ? fld40w : 
+   _auto_fld5 > 100  ? fld20w : _auto_fld5 > 55  ? fld80 : 
+   _auto_fld5 > 25  ? fld40 : _auto_fld5 > 12  ? fld20 : _auto_fld5 > 7  ? fld10 : _auto_fld5 > 3.2  ? fld5: _auto_fld5 > 2  ? fld2 :  _auto_fld5 > 1  ? fld1 : _auto_fld5 > 0.15  ? fld5h :fld0
+
+color_fld6 = _auto_fld6 > 5500 ? fld18y : _auto_fld6 > 2500  ? fld9y : 
+   _auto_fld6 > 1000  ? fld54m : _auto_fld6 > 400  ? fld18m : _auto_fld6 > 200  ? fld40w : 
+   _auto_fld6 > 100  ? fld20w : _auto_fld6 > 55  ? fld80 : 
+   _auto_fld6 > 25  ? fld40 : _auto_fld6 > 12  ? fld20 : _auto_fld6 > 7  ? fld10 : _auto_fld6 > 3.2  ? fld5: _auto_fld6 > 2  ? fld2 :  _auto_fld6 > 1  ? fld1 : _auto_fld6 > 0.15  ? fld5h :fld0
+
+color_fld7 = _auto_fld7 > 5500 ? fld18y : _auto_fld7 > 2500  ? fld9y : 
+   _auto_fld7 > 1000  ? fld54m : _auto_fld7 > 400  ? fld18m : _auto_fld7 > 200  ? fld40w : 
+   _auto_fld7 > 100  ? fld20w : _auto_fld7 > 55  ? fld80 : 
+   _auto_fld7 > 25  ? fld40 : _auto_fld7 > 12  ? fld20 : _auto_fld7 > 7  ? fld10 : _auto_fld7 > 3.2  ? fld5: _auto_fld7 > 2  ? fld2 :  _auto_fld7 > 1  ? fld1 : _auto_fld7 > 0.15  ? fld5h :fld0
+
+//------------------------------ Logic -------------------------------
+
+// get highs, lows and timestamps from D1 and W1 timeframes
+day_start = security(syminfo.tickerid, 'D', time, lookahead = barmerge.lookahead_on)
+day_high = security(syminfo.tickerid, 'D', high, lookahead = barmerge.lookahead_on)
+day_low = security(syminfo.tickerid, 'D', low, lookahead = barmerge.lookahead_on)
+week_start = security(syminfo.tickerid, 'W', time, lookahead = barmerge.lookahead_on)
+week_high = security(syminfo.tickerid, 'W', high, lookahead = barmerge.lookahead_on)
+week_low = security(syminfo.tickerid, 'W', low, lookahead = barmerge.lookahead_on)
+
+var second_ms = 1000
+var minute_ms = second_ms * 60
+var hour_ms = minute_ms * 60
+var day_ms = hour_ms * 24
+var week_ms = day_ms * 7
+
+get_ms_from_today_start() =>
+	hour_ms * hour(timenow) + minute_ms * minute(timenow) + second_ms * second(timenow)
+get_ms_from_week_start() =>
+	day_ms * (dayofweek(timenow) == dayofweek.sunday ? 6 : (dayofweek(timenow) -2)) + get_ms_from_today_start()
+
+// calculate ranges in ms for time calculations
+from_day_start_to_now_range = get_ms_from_today_start()
+from_week_start_to_now_range = get_ms_from_week_start() // dayofweek returns 1 for sunday and 2 for monday
+from_candle_to_now_range = timenow - time
+
+// Adjustement if Timeframe is less than 1
+adj0 = _auto_multiplier0 < 1 ? _auto_multiplier0 : 1
+adj1 = _auto_multiplier < 1 ? _auto_multiplier : 1
+adj2 = _auto_multiplier2 < 1 ? _auto_multiplier2 : 1
+adj3 = _auto_multiplier3 < 1 ? _auto_multiplier3 : 1
+adj4 = _auto_multiplier4 < 1 ? _auto_multiplier4 : 1
+adj5 = _auto_multiplier5 < 1 ? _auto_multiplier5 : 1
+adj6 = _auto_multiplier6 < 1 ? _auto_multiplier6 : 1
+adj7 = _auto_multiplier7 < 1 ? _auto_multiplier7 : 1
+
+fld0_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld0*fld0_hist_bar/adj0) + from_day_start_to_now_range + second_ms 
+fld_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld_new*fld_hist_bar/adj1) + from_day_start_to_now_range + second_ms 
+fld2a_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld2_new*fld2a_hist_bar/adj2) + from_day_start_to_now_range + second_ms 
+fld2_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld2_new*fld2_hist_bar/adj2) + from_day_start_to_now_range + second_ms 
+fld3a_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld3_new*fld3a_hist_bar/adj3) + from_day_start_to_now_range + second_ms 
+fld3_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld3_new*fld3_hist_bar/adj3) + from_day_start_to_now_range + second_ms 
+fld4_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld4_new*fld4_hist_bar/adj4) + from_day_start_to_now_range + second_ms 
+fld5_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld5_new*fld5_hist_bar/adj5) + from_day_start_to_now_range + second_ms 
+fld6_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld6_new*fld6_hist_bar/adj6) + from_day_start_to_now_range + second_ms 
+fld7_limit_left = from_candle_to_now_range <  day_ms * (_auto_fld7_new*fld7_hist_bar/adj7) + from_day_start_to_now_range + second_ms  
+
+
+//------------------------- Plotting ---------------------------------
+
+//dev = stdev(FLD0,2)
+//dev = min(stdev(FLD0,2),int(_auto_fld0_new*_auto_multiplier0))
+//dev = (min(atr(int(_auto_multiplier0*100)),100) - min(atr(int(_auto_multiplier0*50)),50))/1
+
+p0_u=plot(fld0_limit_left ? (fld0_hide ? na :FLD0) : na, title="FLD #0", style=plot.style_linebr, linewidth=Width0 , color=color_fld0, transp=100,offset=ceil(_auto_fld0_new*round(_auto_multiplier0)*0.50+1))
+//p0_d=plot(fld0_limit_left ? (fld0_hide ? na :FLD0) : na, title="FLD #0", style=plot.style_linebr, linewidth=Width0 , color=color_fld0, transp=100,offset=ceil(_auto_fld0_new*round(_auto_multiplier0)*0.50+2))
+p0_d=plot(fld0_limit_left ? (fld0_hide ? na :FLD0) : na, title="FLD #0", style=plot.style_linebr, linewidth=Width0 , color=color_fld0, transp=100,offset=ceil(_auto_fld0_new*round(_auto_multiplier0)*0.50))
+fill(p0_u, p0_d, transp=Transp0, color=color_fld0)
+
+plot(fld_limit_left ? (fld_hide ? na :FLD) : na, title="FLD #1", style=plot.style_line, linewidth=Width, color=color_fld1, transp=Transp,offset=ceil(_auto_fld_new*round(_auto_multiplier)*0.50+1))
+
+plot(fld2_limit_left ? (fld2_hide ? na :FLD2) : na, title="FLD #2", style=plot.style_line, linewidth=Width2, color=color_fld2, transp=Transp2,offset=ceil(_auto_fld2_new*round(_auto_multiplier2)*0.50+1))
+plot(fld2a_limit_left ? (fld2_hide ? na :FLD2) : na, title="FLD #2A", style=plot.style_line, linewidth=Width2a, color=color_fld2, transp=Transp2a,offset=ceil(_auto_fld2_new*round(_auto_multiplier2)*0.50+1))
+
+plot(fld3_limit_left ? (fld3_hide ? na :FLD3) : na, title="FLD #3", style=plot.style_line, linewidth=Width3, color=color_fld3, transp=Transp3, offset=ceil(_auto_fld3_new*round(_auto_multiplier3)*0.50+1))
+plot(fld3a_limit_left ? (fld3_hide ? na :FLD3) : na, title="FLD #3", style=plot.style_line, linewidth=Width3a, color=color_fld3, transp=Transp3a, offset=ceil(_auto_fld3_new*round(_auto_multiplier3)*0.50+1))
+
+//plot(fld4_limit_left ? (fld4_hide ? na :FLD4) : na, title="FLD #4", style=plot.style_line, linewidth=Width4, color=color_fld4, transp=Transp4, offset=ceil(_auto_fld4_new*round(_auto_multiplier4)*0.50+1))
+plot( fld4_hide ? na :FLD4, title="FLD #4", style=plot.style_line, linewidth=Width4, color=color_fld4, transp=Transp4, offset=ceil(_auto_fld4_new*round(_auto_multiplier4)*0.50+1))
+//plot( fld4_hide ? na :FLD4, title="FLD #4", style=plot.style_line, linewidth=Width4, color=color_fld4, transp=Transp4, offset=ceil(_auto_fld4_new*round(_auto_multiplier4)*0.50+1))
+
+
+plot(fld5_limit_left ? (fld5_hide ? na :FLD5) : na, title="FLD #5", style=plot.style_line, linewidth=Width5, color=color_fld5, transp=Transp5, offset=ceil(_auto_fld5_new*round(_auto_multiplier5)*0.50+1))
+plot(fld6_limit_left ? (fld6_hide ? na :FLD6) : na, title="FLD #6", style=plot.style_line, linewidth=Width6, color=color_fld6, transp=Transp6, offset=ceil(_auto_fld6_new*round(_auto_multiplier6)*0.50+1))
+plot(fld7_limit_left ? (fld7_hide ? na :FLD7) : na, title="FLD #7", style=plot.style_line, linewidth=Width7, color=color_fld7, transp=Transp7, offset=ceil(_auto_fld7_new*round(_auto_multiplier7)*0.50+1))
+
+
+
+// ----------------------------------------------------------
+// FLD Marker
+
+f_find_idx(_period, _delay) =>
+
+    // init our _return variable
+    var int _return = na
+    
+    //_high = security(syminfo.tickerid, 'D', high)
+    //_low = security(syminfo.tickerid, 'D', low)
+    _high = high
+    _low = low
+    
+    _fractal_top = 0.0
+    //_fractal_top := _high[_delay+1] > _high[_delay+2] and _high[_delay+1] > _high[_delay+0] ? _high[_delay+1]: _fractal_top[1]
+    _fractal_top := _high[_delay+1] > _high[_delay+3] and _high[_delay+1] > _high[_delay+2] and _high[_delay+1] > _high[_delay+0] ? _high[_delay+1]: _fractal_top[1]
+    _fractal_bottom = 0.0
+    //_fractal_bottom := _low[_delay+1] < _low[_delay+2] and _low[_delay+1] < _low[_delay+0] ? _low[_delay+1] : _fractal_bottom[1]
+    _fractal_bottom := _low[_delay+1] < _low[_delay+3] and _low[_delay+1] < _low[_delay+2] and _low[_delay+1] < _low[_delay+0]  ? _low[_delay+1] : _fractal_bottom[1]
+
+    _srcHigh = _fractal_top
+    _srcLow = _fractal_bottom
+    
+    _idx = 0
+    _done = false
+    for _i = _delay to _period+_delay
+        if (_low[_i] == _srcLow) and (not _done) 
+            _idx:= _i
+            _done := true
+            
+    //search a bit further to see if there is another low
+
+    _return  := _idx 
+    
+_idx_0 = f_find_idx(period0,delay+int(_auto_multiplier*1*_auto_fld0_new))
+_idx_1 = f_find_idx(period1,delay+int(_auto_multiplier*1*_auto_fld1_new))
+_idx_2 = f_find_idx(period2,delay+int(_auto_multiplier*1*_auto_fld2_new))
+_idx_3 = f_find_idx(period3,delay+int(_auto_multiplier*1*_auto_fld3_new))
+_idx_4 = f_find_idx(period4,delay+int(_auto_multiplier*1*_auto_fld4_new))
+_idx_5 = f_find_idx(period5,delay+int(_auto_multiplier*1*_auto_fld5_new))
+_idx_6 = f_find_idx(period5,delay+int(_auto_multiplier*1*_auto_fld6_new))
+_idx_7 = f_find_idx(period5,delay+int(_auto_multiplier*1*_auto_fld7_new))
+
+
+var label label_fld0 = na
+label.delete(label_fld0)
+
+var label label_fld = na
+label.delete(label_fld)
+
+var label label_fld2 = na
+label.delete(label_fld2)
+
+var label label_fld3 = na
+label.delete(label_fld3)
+
+var label label_fld4 = na
+label.delete(label_fld4)
+
+var label label_fld5 = na
+label.delete(label_fld5)
+
+var label label_fld6 = na
+label.delete(label_fld6)
+
+var label label_fld7 = na
+label.delete(label_fld7)
+
+if not fld0_hide
+    label_fld0 := label.new(x=bar_index+offset_len0, y=FLD0[ceil(_auto_fld0_new*round(_auto_multiplier0)*0.50+offset_len0)] , text="*** [FLD0: " + tostring(_auto_fld0_new,PriceFormat2()) + "] ***", style=label.style_none, textcolor=color_fld0, size=size.normal)
+    
+if not fld_hide
+    //label_fld := label.new(x=bar_index+offset_len1, y=max(FLD[_idx_1],FLD[offset_len1])  , text="[FLD1: " + tostring(_auto_fld,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld1, size=size.large)
+    label_fld := label.new(x=bar_index+offset_len1, y=FLD[ceil(_auto_fld_new*round(_auto_multiplier)*0.50+offset_len1)]  , text="[FLD1: " + tostring(_auto_fld_new,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld1, size=size.large)
+
+if not fld2_hide
+    label_fld2 := label.new(x=bar_index+offset_len2, y=FLD2[ceil(_auto_fld2_new*round(_auto_multiplier2)*0.50+offset_len2)]  , text="[FLD2: " + tostring(_auto_fld2_new,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld2, size=size.large)
+    
+if not fld3_hide
+    label_fld3 := label.new(x=bar_index+offset_len3, y=FLD3[ceil(_auto_fld3_new*round(_auto_multiplier3)*0.50+offset_len3)]  , text="[FLD3: " + tostring(_auto_fld3_new,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld3, size=size.large)
+    
+if not fld4_hide
+    label_fld4 := label.new(x=bar_index+offset_len4, y=FLD4[ceil(_auto_fld4_new*round(_auto_multiplier4)*0.50+offset_len4)] , text="[FLD4: " + tostring(_auto_fld4_new,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld4, size=size.large)
+
+if not fld5_hide
+    label_fld5 := label.new(x=bar_index+offset_len5, y=FLD4[ceil(_auto_fld4_new*round(_auto_multiplier5)*0.50+offset_len5)] , text="[FLD5: " + tostring(_auto_fld5_new,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld5, size=size.large)
+
+if not fld6_hide
+    label_fld6 := label.new(x=bar_index+offset_len6, y=FLD6[ceil(_auto_fld6_new*round(_auto_multiplier6)*0.50+offset_len6)]  , text="[FLD6: " + tostring(_auto_fld6_new,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld6, size=size.large)
+
+if not fld7_hide
+    label_fld7 := label.new(x=bar_index+offset_len7, y=FLD7[ceil(_auto_fld7_new*round(_auto_multiplier7)*0.50+offset_len7)]  , text="[FLD7: " + tostring(_auto_fld7_new,PriceFormat2()) + "]", style=label.style_none, textcolor=color_fld7, size=size.large)
+
+// ===========================================
+// Alerts
+
+f_crossing_level_up(sr, r) =>
+    //(r > sr and r < sr[1])
+    (r < sr and r > sr[1])
+    
+f_crossing_level_down(sr, r) =>
+    //(r < sr and r > sr[1])
+    (r > sr and r < sr[1])
+
+if f_crossing_level_up(close, FLD0[ceil(_auto_fld0_new*round(_auto_multiplier0)*0.50+1)])
+    alert("FLD " + tostring(auto_fld0,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD0[ceil(_auto_fld0_new*round(_auto_multiplier0)*0.50+1)])
+        alert("FLD " + tostring(auto_fld0,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+        
+        
+if f_crossing_level_up(close, FLD[ceil(_auto_fld_new*round(_auto_multiplier)*0.50+1)])
+    alert("FLD " + tostring(auto_fld,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD[ceil(_auto_fld_new*round(_auto_multiplier)*0.50+1)])
+        alert("FLD " + tostring(auto_fld,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+        
+        
+if f_crossing_level_up(close, FLD2[ceil(_auto_fld2_new*round(_auto_multiplier2)*0.50+1)])
+    alert("FLD " + tostring(auto_fld2,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD2[ceil(_auto_fld2_new*round(_auto_multiplier2)*0.50+1)])
+        alert("FLD " + tostring(auto_fld2,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+        
+
+if f_crossing_level_up(close, FLD3[ceil(_auto_fld3_new*round(_auto_multiplier3)*0.50+1)])
+    alert("FLD " + tostring(auto_fld3,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD3[ceil(_auto_fld3_new*round(_auto_multiplier3)*0.50+1)])
+        alert("FLD " + tostring(auto_fld3,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+        
+        
+if f_crossing_level_up(close, FLD4[ceil(_auto_fld4_new*round(_auto_multiplier4)*0.50+1)])
+    alert("FLD " + tostring(auto_fld4,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD4[ceil(_auto_fld4_new*round(_auto_multiplier4)*0.50+1)])
+        alert("FLD " + tostring(auto_fld4,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+        
+        
+if f_crossing_level_up(close, FLD5[ceil(_auto_fld5_new*round(_auto_multiplier5)*0.50+1)])
+    alert("FLD " + tostring(auto_fld5,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD5[ceil(_auto_fld5_new*round(_auto_multiplier5)*0.50+1)])
+        alert("FLD " + tostring(auto_fld5,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+        
+        
+if f_crossing_level_up(close, FLD6[ceil(_auto_fld6_new*round(_auto_multiplier6)*0.50+1)])
+    alert("FLD " + tostring(auto_fld6,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD6[ceil(_auto_fld6_new*round(_auto_multiplier6)*0.50+1)])
+        alert("FLD " + tostring(auto_fld6,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+
+
+if f_crossing_level_up(close, FLD7[ceil(_auto_fld7_new*round(_auto_multiplier7)*0.50+1)])
+    alert("FLD " + tostring(auto_fld7,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Above " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+else
+    if f_crossing_level_down(close, FLD7[ceil(_auto_fld7_new*round(_auto_multiplier7)*0.50+1)])
+        alert("FLD " + tostring(auto_fld7,PriceFormat2()) + " Alert: " + syminfo.ticker + " Crossed Below " + tostring(close) + " " + timeframe.period, freq = alert.freq_once_per_bar)
+        

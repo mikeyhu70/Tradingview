@@ -1,0 +1,176 @@
+//@version=4
+//      CREDITS: http://quant.stackexchange.com/questions/2816/how-to-calculate-time-segmented-volume
+
+study("Time Segmented Volume", shorttitle="TSV")
+
+l = input(2, title="Length")
+l_ma = input(20, title="MA Length")
+isOscillating = input(defval=false, type=input.bool, title="Oscillating")
+
+// -- MA of series of Integer
+
+Sum(src,p) => a = cum(src), a - a[max(p,0)]
+
+Sma(src,p) => a = cum(src), (a - a[max(p,0)])/max(p,0)
+
+Ema(src,p) =>
+    ema = 0.
+    sf = 2/(p+1)
+    ema := nz(ema[1] + sf*(src - ema[1]),src)
+
+Wma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), (mp*a - Sum(a[1],p))/denom
+    
+Hma(src, len) => Wma(2*Wma(src, len/2)-Wma(src, len), round(sqrt(len)))
+
+Lsma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), b = (mp*a - Sum(a[1],p))/denom
+    3*b - 2*(a - a[mp])/mp
+
+Variance(src,p) => p == 1 ? 0 : Sma(src*src,p) - pow(Sma(src,p),2)
+
+Stdev(src,p) => p == 1 ? 0 : sqrt(Sma(src*src,p) - pow(Sma(src,p),2)) 
+
+Atr(p) =>
+    atr = 0.
+    Tr = max(high,close[1]) - min(low,close[1])
+    atr := nz(atr[1] + (Tr - atr[1])/p,Tr)
+
+Covariance(x,y,p) => Sma(x*y,p) - Sma(x,p)*Sma(y,p)
+
+Correlation(x,y,p) => Covariance(x,y,p)/(Stdev(x,p)*Stdev(y,p))
+
+// -- Custom MA 
+
+nma(src, length1, length2) =>
+    lambda = length1 / length2
+    alpha = lambda * (length1 - 1) / (length1 - lambda)
+    ma1 = Ema(src, length1)
+    ma2 = Ema(ma1, length2)
+    nma = (1 + alpha) * ma1 - alpha * ma2
+    
+dema(src, len) => 
+    ma1 = Ema(src, len)
+    ma2 = Ema(ma1, len)
+    2 * ma1 - ma2
+    
+eTma(_src, _len) =>
+    _tma = Ema(Ema(_src, _len), _len)
+    
+tma(_src, _len) =>
+  _tma = Sma(Sma(_src, _len), _len)
+    
+noma(_src,_len) =>
+    _noma = _src
+
+tema(src, len) => 
+    ma1 = Ema(src, len)
+    ma2 = Ema(ma1, len)
+    ma3 = Ema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tdema(src, len) => 
+    ma1 = dema(src, len)
+    ma2 = dema(ma1, len)
+    ma3 = dema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+ttema(src, len) => 
+    ma1 = tema(src, len)
+    ma2 = tema(ma1, len)
+    ma3 = tema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tnma(src, len) => 
+    ma1 = nma(src, len, 3)
+    ma2 = nma(ma1, len, 3)
+    ma3 = nma(ma2, len, 3)
+    //4 * (ma1 - ma3) + ma3
+    3 * (ma1 - ma3) + ma3
+
+thma(src, len) => 
+    ma1 = Hma(src, len)
+    ma2 = Hma(ma1, len)
+    ma3 = Hma(ma2, len)
+    3 * (ma1 - ma2) + ma3
+    
+zlema(src, len) =>
+    lag = round((len - 1) / 2)
+    zlsrc = src + (src - src[lag])
+    Ema(zlsrc, len)
+
+zldema(src, len) =>
+    lag = round((len - 1) / 2)
+    zlsrc = src + (src - src[lag])
+    dema(zlsrc, len)
+    
+zltema(src, len) =>
+    lag = round((len - 1) / 2)
+    zlsrc = src + (src - src[lag])
+    tema(zlsrc, len)
+    
+dzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    2 * ma1 - ma2
+
+tzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+    
+//qzlema(src, len) => 
+//    ma1 = zlema(src, len)
+//    ma2 = zlema(ma1, len)
+//    ma3 = zlema(ma2, len)
+//    ma4 = zlema(ma3, len)
+//    3 * (ma2 - ma3) + ma4
+    
+qzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    ma4 = zlema(ma3, len)
+    2 * (ma1 - ma2) + 2 * (ma2 - ma3) + ma4
+
+llema(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Ema(srcnew, len)
+    
+llsma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Sma(srcnew, len)
+    
+llhma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Hma(srcnew, len)
+    
+llwma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Wma(srcnew, len)
+    
+llrma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    rma(srcnew, len)
+    
+lltema(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    tema(srcnew, len)
+
+//t = sum(close>close[1]?volume*close-close[1]:close<close[1]?(volume*-1)*close-close:0,l)
+// previous line is non sensical. The correct version follows
+t = sum(close > close[1] ? volume * (close - close[1]) : close < close[1] ? volume * (close - close[1]) : 0, l)
+
+pcolor = t > 0 ? color.green : color.red
+
+
+tf = isOscillating ? t : abs(t)
+m = isOscillating ? zldema(t, l_ma) : zldema(tf, l_ma)
+
+plot(tf, color=pcolor, style=plot.style_columns, transp=50)
+plot(m, color=color.green, transp=100)

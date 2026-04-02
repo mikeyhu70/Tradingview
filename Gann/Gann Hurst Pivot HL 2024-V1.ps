@@ -1,0 +1,508 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © congacindy
+
+//@version=5
+indicator("Gann Hurst Pivot HL 2024-V1", overlay = true)
+
+// Inputs
+leftBars = input.int(4, "Left Bars", minval=1)
+rightBars = input.int(4, "Right Bars", minval=1)
+nswing = input.int(8, "Number of Swing? Display", minval=1)
+nStore= input.int(12, "Number of Swing?", minval=1)
+nDatePast = input.int(45, "Number of Days in the past to display?", minval=1)
+nDateFuture= input.int(90, "Number of Days in the future to display?", minval=1)
+nNearFuture= input.int(21, "Number of Days in the future to change color?", minval=1)
+debugHigh = input.bool(false,title="Display Gann Debug for Pivot High")
+debugLow = input.bool(false,title="Display Gann Debug for Pivot Low")
+HdebugHigh = input.bool(false,title="Display Hurst Cycle Debug for Pivot High")
+HdebugLow = input.bool(false,title="Display Hurst Cycle for Pivot Low")
+
+// Get swing high and low
+pivotHigh = ta.pivothigh(high, leftBars, rightBars)
+pivotLow = ta.pivotlow(low, leftBars, rightBars)
+
+txt_col_bull = input.color(color.rgb(76, 244, 169), 'Text/Frame Color', group='Dashboard')
+txt_col_bear = input.color(color.rgb(228, 95, 235), 'Text/Frame Color', group='Dashboard')
+
+txt_col = input.color(color.rgb(182, 186, 200), 'Text/Frame Color', group='Dashboard')
+dash_loc_extra = input.string('Top Left', 'Dashboard Location for Soltice ...', options=['Top Right', 'Bottom Right', 'Top Left', 'Mid Left', 'Mid Right'], group='Dashboard')
+text_size = input.string('Tiny', 'Dashboard Size', options=['Tiny', 'Small', 'Normal', 'Large'], group='Dashboard')
+
+
+// Store last 10 swing high and low values
+//var float[] lastHighs = array.new_float(nswing)
+//var float[] lastLows = array.new_float(nswing)
+//var int[] lastHighDates = array.new_int(nswing)
+//var int[] lastLowDates = array.new_int(nswing)
+
+// Declare SwingLowData as matrices
+var swingLowData = matrix.new<float>(nStore, 10)
+
+if not na (pivotLow)
+    // Shift the existing rows down
+    for i = nStore - 1 to 1
+        for j = 0 to 9
+            matrix.set(swingLowData, i, j, matrix.get(swingLowData, i - 1, j))
+    
+    // Add the new data to the first row
+    matrix.set(swingLowData, 0, 0, low[rightBars])
+    matrix.set(swingLowData, 0, 1, time[rightBars])
+    matrix.set(swingLowData, 0, 2, time[rightBars] + 22.5 * 24 * 60 * 60 * 1000)
+    matrix.set(swingLowData, 0, 3, time[rightBars] + 45 * 24 * 60 * 60 * 1000)
+    matrix.set(swingLowData, 0, 4, time[rightBars] + 90 * 24 * 60 * 60 * 1000)
+    matrix.set(swingLowData, 0, 5, time[rightBars] + 135 * 24 * 60 * 60 * 1000)
+    matrix.set(swingLowData, 0, 6, time[rightBars] + 180 * 24 * 60 * 60 * 1000)
+    matrix.set(swingLowData, 0, 7, time[rightBars] + 225 * 24 * 60 * 60 * 1000)
+    matrix.set(swingLowData, 0, 8, time[rightBars] + 270 * 24 * 60 * 60 * 1000)
+    matrix.set(swingLowData, 0, 9, time[rightBars] + 315 * 24 * 60 * 60 * 1000)
+
+// Declare swingHighData as a matrix
+//var swingHighData = matrix.new<float>(nStore, 10)
+
+// Initialize the swingHighData matrix with the desired dimensions
+var swingHighData = matrix.new<float>(nStore, 10, float(na))
+
+
+if not na(pivotHigh) 
+    // Shift the existing rows down
+    for i = nStore - 1 to 1
+        for j = 0 to 9
+            matrix.set(swingHighData, i, j, matrix.get(swingHighData, i - 1, j))
+    
+    // Add the new data to the first row
+    matrix.set(swingHighData, 0, 0, high[rightBars])
+    matrix.set(swingHighData, 0, 1, time[rightBars])
+    matrix.set(swingHighData, 0, 2, time[rightBars] + 22.5 * 24 * 60 * 60 * 1000)
+    matrix.set(swingHighData, 0, 3, time[rightBars] + 45 * 24 * 60 * 60 * 1000)
+    matrix.set(swingHighData, 0, 4, time[rightBars] + 90 * 24 * 60 * 60 * 1000)
+    matrix.set(swingHighData, 0, 5, time[rightBars] + 135 * 24 * 60 * 60 * 1000)
+    matrix.set(swingHighData, 0, 6, time[rightBars] + 180 * 24 * 60 * 60 * 1000)
+    matrix.set(swingHighData, 0, 7, time[rightBars] + 225 * 24 * 60 * 60 * 1000)
+    matrix.set(swingHighData, 0, 8, time[rightBars] + 270 * 24 * 60 * 60 * 1000)
+    matrix.set(swingHighData, 0, 9, time[rightBars] + 315 * 24 * 60 * 60 * 1000)      
+
+// Declare SwingLowData as matrices
+var HswingLowData = matrix.new<float>(nStore, 10)
+
+if not na (pivotLow)
+    // Shift the existing rows down
+    for i = nStore - 1 to 1
+        for j = 0 to 9
+            matrix.set(HswingLowData, i, j, matrix.get(HswingLowData, i - 1, j))
+    
+    // Add the new data to the first row
+    matrix.set(HswingLowData, 0, 0, low[rightBars])
+    matrix.set(HswingLowData, 0, 1, time[rightBars])
+    matrix.set(HswingLowData, 0, 2, time[rightBars] + 8 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingLowData, 0, 3, time[rightBars] + 17 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingLowData, 0, 4, time[rightBars] + 34 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingLowData, 0, 5, time[rightBars] + 68 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingLowData, 0, 6, time[rightBars] + 136 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingLowData, 0, 7, time[rightBars] + 273 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingLowData, 0, 8, time[rightBars] + 546 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingLowData, 0, 9, time[rightBars] + 1637 * 24 * 60 * 60 * 1000)
+
+// Declare swingHighData as a matrix
+//var swingHighData = matrix.new<float>(nStore, 10)
+
+// Initialize the swingHighData matrix with the desired dimensions
+var HswingHighData = matrix.new<float>(nStore, 10, float(na))
+
+
+if not na(pivotHigh) 
+    // Shift the existing rows down
+    for i = nStore - 1 to 1
+        for j = 0 to 9
+            matrix.set(HswingHighData, i, j, matrix.get(HswingHighData, i - 1, j))
+    
+    // Add the new data to the first row
+    matrix.set(HswingHighData, 0, 0, high[rightBars])
+    matrix.set(HswingHighData, 0, 1, time[rightBars])
+    matrix.set(HswingHighData, 0, 2, time[rightBars] + 8 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingHighData, 0, 3, time[rightBars] + 17 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingHighData, 0, 4, time[rightBars] + 34 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingHighData, 0, 5, time[rightBars] + 68 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingHighData, 0, 6, time[rightBars] + 136 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingHighData, 0, 7, time[rightBars] + 273 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingHighData, 0, 8, time[rightBars] + 546 * 24 * 60 * 60 * 1000)
+    matrix.set(HswingHighData, 0, 9, time[rightBars] + 1637 * 24 * 60 * 60 * 1000)      
+
+
+// Create table
+//var table swingTable = table.new(position.top_right, 6, nswing+1, border_color=txt_col,border_width=1,frame_color=txt_col,frame_width=1)
+
+//var table_position_low = dash_loc_low == 'Top Left' ? position.top_left : dash_loc_low == 'Bottom Left' ? position.bottom_left : dash_loc_low == 'Top Right' ? position.top_right : position.bottom_right
+//var table_position_high = dash_loc_high == 'Top Left' ? position.top_left : dash_loc_high == 'Bottom Left' ? position.bottom_left : dash_loc_high == 'Top Right' ? position.top_right : position.bottom_right
+//var table_position_extra = dash_loc_extra == 'Top Left' ? position.top_left : dash_loc_extra == 'Bottom Left' ? position.bottom_left : dash_loc_extra == 'Top Right' ? position.top_right : position.bottom_right
+
+var table_position_extra = dash_loc_extra == 'Top Left' ? position.top_left : dash_loc_extra == 'Bottom Left' ? position.bottom_left : dash_loc_extra == 'Top Right' ? position.top_right : dash_loc_extra == 'Mid Left' ? position.middle_left : dash_loc_extra == 'Mid Right' ? position.middle_right : position.bottom_right
+
+var table_text_size = text_size == 'Tiny' ? size.tiny : text_size == 'Small' ? size.small : text_size == 'Normal' ? size.normal : size.large
+
+    
+currentDate = time
+twoWeeksLater = currentDate + 14 * 24 * 60 * 60 * 1000
+float cellDate = 0.0
+oneMonthAgo = int(timenow - 45 * nDatePast * 60 * 60 * 1000)
+sixtyDaysInFuture = int(timenow + nDateFuture * 24 * 60 * 60 * 1000)
+fourteenDaysInFuture = int(timenow + nNearFuture * 24 * 60 * 60 * 1000)
+
+if debugHigh
+    var table swingHighTable = table.new(position.bottom_right, 15, nStore + 1, border_width=1)
+
+    // Add the table header
+    table.cell(swingHighTable, 0, 0, "Row", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 1, 0, "High", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 2, 0, "Time", text_color=color.white, bgcolor=   color.black,text_size=size.small)
+    table.cell(swingHighTable, 3, 0, "+22.5", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 4, 0, "+45", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 5, 0, "+90", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 6, 0, "+135", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 7, 0, "+180", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 8, 0, "+225", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 9, 0, "+270", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingHighTable, 10, 0, "+315", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+    //table.cell(swingHighTable, 0, 1, str.tostring(1), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 1, 1, str.tostring(matrix.get(swingHighData, 0, 0)), text_color=color.green, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 2, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 1)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 3, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 2)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 4, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 3)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 5, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 4)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 6, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 5)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 7, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 6)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 8, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 7)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 9, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 8)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingHighTable, 10, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, 0, 9)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+    //table.cell(swingHighTable, 0, 2, str.tostring(2), text_color=color.white, bgcolor=color.black)
+
+    //Add the table rows
+    for k = 0 to nStore-1
+        table.cell(swingHighTable, 0,  k+1, str.tostring(k), text_color=color.red, bgcolor=color.black,text_size=size.small)
+        table.cell(swingHighTable, 1,  k+1, str.tostring(matrix.get(swingHighData, k,0)), text_color=color.green, bgcolor=color.black,text_size=size.small)
+    
+        //for j = 2 to 10
+        //    table.cell(swingHighTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, k,j-1)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+        for j = 2 to 10
+        
+            cellDate := matrix.get(swingHighData, k, j-1)
+
+            //table.cell(swingHighTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.white, bgcolor=color.black,text_size=size.small)
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(swingHighTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.white, bgcolor=color.black,text_size=size.small)
+            else
+                table.cell(swingHighTable, j , k+1 , "", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+            table.cell(swingHighTable, 11,  k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(swingHighTable, 12,  k+1, str.format("{0,date,yyyy-MM-dd}", currentDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(swingHighTable, 13,  k+1, str.format("{0,date,yyyy-MM-dd}", twoWeeksLater), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(swingHighTable, 14,  k+1, str.tostring(k) + "," + str.tostring(j-1), text_color=color.red, bgcolor=color.black,text_size=size.small)
+
+
+if debugLow
+    var table swingLowTable = table.new(position.bottom_right, 15, nStore + 1, border_width=1)
+
+    // Add the table header
+    table.cell(swingLowTable, 0, 0, "Row", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 1, 0, "Low", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 2, 0, "Time", text_color=color.white, bgcolor=   color.black,text_size=size.small)
+    table.cell(swingLowTable, 3, 0, "+22.5", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 4, 0, "+45", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 5, 0, "+90", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 6, 0, "+135", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 7, 0, "+180", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 8, 0, "+225", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 9, 0, "+270", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(swingLowTable, 10, 0, "+315", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+    //table.cell(swingLowTable, 0, 1, str.tostring(1), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 1, 1, str.tostring(matrix.get(swingLowData, 0, 0)), text_color=color.green, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 2, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 1)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 3, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 2)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 4, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 3)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 5, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 4)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 6, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 5)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 7, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 6)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 8, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 7)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 9, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 8)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(swingLowTable, 10, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 9)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+    //table.cell(swingLowTable, 0, 2, str.tostring(2), text_color=color.white, bgcolor=color.black)
+
+    //Add the table rows
+    for k = 0 to nStore-1
+        table.cell(swingLowTable, 0,  k+1, str.tostring(k), text_color=color.red, bgcolor=color.black,text_size=size.small)
+        table.cell(swingLowTable, 1,  k+1, str.tostring(matrix.get(swingLowData, k,0)), text_color=color.green, bgcolor=color.black,text_size=size.small)
+    
+        //for j = 2 to 10
+        //    table.cell(swingLowTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, k,j-1)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+        for j = 2 to 10
+        
+            cellDate := matrix.get(swingLowData, k, j-1)
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(swingLowTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.white, bgcolor=color.black,text_size=size.small)
+            else
+                table.cell(swingLowTable, j , k+1 , "", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+            table.cell(swingLowTable, 11,  k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(swingLowTable, 12,  k+1, str.format("{0,date,yyyy-MM-dd}", currentDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(swingLowTable, 13,  k+1, str.format("{0,date,yyyy-MM-dd}", twoWeeksLater), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(swingLowTable, 14,  k+1, str.tostring(k) + "," + str.tostring(j-1), text_color=color.red, bgcolor=color.black,text_size=size.small)
+
+
+if HdebugHigh
+    var table HswingHighTable = table.new(position.bottom_right, 15, nStore + 1, border_width=1)
+
+    // Add the table header
+    table.cell(HswingHighTable, 0, 0, "Row", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 1, 0, "High", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 2, 0, "Time", text_color=color.white, bgcolor=   color.black,text_size=size.small)
+    table.cell(HswingHighTable, 3, 0, "10D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 4, 0, "20D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 5, 0, "40D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 6, 0, "80D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 7, 0, "20W", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 8, 0, "40W", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 9, 0, "18M", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingHighTable, 10, 0, "54M", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+
+    //Add the table rows
+    for k = 0 to nStore-1
+        table.cell(HswingHighTable, 0,  k+1, str.tostring(k), text_color=color.red, bgcolor=color.black,text_size=size.small)
+        table.cell(HswingHighTable, 1,  k+1, str.tostring(matrix.get(swingHighData, k,0)), text_color=color.green, bgcolor=color.black,text_size=size.small)
+    
+        //for j = 2 to 10
+        //    table.cell(HswingHighTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}",matrix.get(swingHighData, k,j-1)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+        for j = 2 to 10
+        
+            cellDate := matrix.get(swingHighData, k, j-1)
+
+            //table.cell(HHswingHighTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.white, bgcolor=color.black,text_size=size.small)
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(HswingHighTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.white, bgcolor=color.black,text_size=size.small)
+            else
+                table.cell(HswingHighTable, j , k+1 , "", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+            table.cell(HswingHighTable, 11,  k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(HswingHighTable, 12,  k+1, str.format("{0,date,yyyy-MM-dd}", currentDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(HswingHighTable, 13,  k+1, str.format("{0,date,yyyy-MM-dd}", twoWeeksLater), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(HswingHighTable, 14,  k+1, str.tostring(k) + "," + str.tostring(j-1), text_color=color.red, bgcolor=color.black,text_size=size.small)
+
+
+if HdebugLow
+    var table HswingLowTable = table.new(position.bottom_right, 15, nStore + 1, border_width=1)
+
+    // Add the table header
+    table.cell(HswingLowTable, 0, 0, "Row", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 1, 0, "Low", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 2, 0, "Time", text_color=color.white, bgcolor=   color.black,text_size=size.small)
+    table.cell(HswingLowTable, 3, 0, "10D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 4, 0, "20D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 5, 0, "40D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 6, 0, "80D", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 7, 0, "20W", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 8, 0, "40W", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 9, 0, "18M", text_color=color.white, bgcolor=color.black,text_size=size.small)
+    table.cell(HswingLowTable, 10, 0, "54M", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+    //table.cell(HswingLowTable, 0, 1, str.tostring(1), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 1, 1, str.tostring(matrix.get(swingLowData, 0, 0)), text_color=color.green, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 2, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 1)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 3, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 2)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 4, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 3)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 5, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 4)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 6, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 5)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 7, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 6)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 8, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 7)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 9, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 8)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+    //table.cell(HswingLowTable, 10, 1, str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, 0, 9)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+    //table.cell(HswingLowTable, 0, 2, str.tostring(2), text_color=color.white, bgcolor=color.black)
+
+    //Add the table rows
+    for k = 0 to nStore-1
+        table.cell(HswingLowTable, 0,  k+1, str.tostring(k), text_color=color.red, bgcolor=color.black,text_size=size.small)
+        table.cell(HswingLowTable, 1,  k+1, str.tostring(matrix.get(swingLowData, k,0)), text_color=color.green, bgcolor=color.black,text_size=size.small)
+    
+        //for j = 2 to 10
+        //    table.cell(HswingLowTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}",matrix.get(swingLowData, k,j-1)), text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+        for j = 2 to 10
+        
+            cellDate := matrix.get(swingLowData, k, j-1)
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(HswingLowTable, j , k+1 , str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.white, bgcolor=color.black,text_size=size.small)
+            else
+                table.cell(HswingLowTable, j , k+1 , "", text_color=color.white, bgcolor=color.black,text_size=size.small)
+
+            table.cell(HswingLowTable, 11,  k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(HswingLowTable, 12,  k+1, str.format("{0,date,yyyy-MM-dd}", currentDate), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(HswingLowTable, 13,  k+1, str.format("{0,date,yyyy-MM-dd}", twoWeeksLater), text_color=color.red, bgcolor=color.black,text_size=size.small)
+            table.cell(HswingLowTable, 14,  k+1, str.tostring(k) + "," + str.tostring(j-1), text_color=color.red, bgcolor=color.black,text_size=size.small)
+
+// Function to get the timestamp for approximate equinox and solstice dates
+getTimestamp(year, month, day) =>
+    timestamp(year, month, day, 0, 0)
+
+// Current year
+currentYear = year(timenow)
+
+// Approximate dates for equinoxes and solstices
+springEquinoxMonth = 3
+springEquinoxDay = 20
+summerSolsticeMonth = 6
+summerSolsticeDay = 21
+autumnEquinoxMonth = 9
+autumnEquinoxDay = 23
+winterSolsticeMonth = 12
+winterSolsticeDay = 21
+
+// Calculate timestamps for the current year
+spring_equinox_timestamp = getTimestamp(currentYear, springEquinoxMonth, springEquinoxDay)
+summer_solstice_timestamp = getTimestamp(currentYear, summerSolsticeMonth, summerSolsticeDay)
+autumn_equinox_timestamp = getTimestamp(currentYear, autumnEquinoxMonth, autumnEquinoxDay)
+winter_solstice_timestamp = getTimestamp(currentYear, winterSolsticeMonth, winterSolsticeDay)
+
+// Create a table to display the turning dates
+var table gann_turning_dates = table.new(position=table_position_extra , columns=2, rows=4+nStore*(10+10), border_color=txt_col,border_width=1,frame_color=txt_col,frame_width=1)
+
+int table_cnt = 0
+string _txt = ""
+// Update the table with the turning dates
+if barstate.islast 
+    table.cell(gann_turning_dates, 0, 0, "Turning Date", text_color=txt_col, text_size=table_text_size)
+    table.cell(gann_turning_dates, 1, 0, "Date", text_color=txt_col, text_size=table_text_size)
+    table_cnt := table_cnt + 1    
+
+    table.cell(gann_turning_dates, 0, 1, "Spring Equinox", text_color=txt_col, text_size=table_text_size)
+    table.cell(gann_turning_dates, 1, 1, str.format("{0,date,yyyy-MM-dd}", spring_equinox_timestamp), text_color=txt_col, text_size=table_text_size)
+    table_cnt := table_cnt + 1 
+
+    table.cell(gann_turning_dates, 0, 2, "Summer Solstice", text_color=txt_col, text_size=table_text_size)
+    table.cell(gann_turning_dates, 1, 2, str.format("{0,date,yyyy-MM-dd}", summer_solstice_timestamp), text_color=txt_col, text_size=table_text_size)
+    table_cnt := table_cnt + 1     
+
+    table.cell(gann_turning_dates, 0, 3, "Autumn Equinox", text_color=txt_col, text_size=table_text_size)
+    table.cell(gann_turning_dates, 1, 3, str.format("{0,date,yyyy-MM-dd}", autumn_equinox_timestamp), text_color=txt_col, text_size=table_text_size)
+    table_cnt := table_cnt + 1     
+
+    table.cell(gann_turning_dates, 0, 4, "Winter Solstice", text_color=txt_col, text_size=table_text_size)
+    table.cell(gann_turning_dates, 1, 4, str.format("{0,date,yyyy-MM-dd}", winter_solstice_timestamp), text_color=txt_col, text_size=table_text_size)
+    table_cnt := table_cnt + 1     
+
+    for k = 1 to nswing
+        for j = 2 to 10
+            cellDate := matrix.get(swingHighData, k, j-1)
+
+            if (j ==3)
+                _txt := "+22.5"
+            else if (j == 4)
+                _txt := "+45"
+            else if (j == 5)
+                _txt := "+90"
+            else if (j == 6)
+                _txt := "+135"
+            else if (j == 7)
+                _txt := "+180"
+            else if (j == 8)
+                _txt := "+225"
+            else if (j == 9)
+                _txt := "+270"
+            else 
+                _txt := "+315"
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(gann_turning_dates, 0, table_cnt+k+1, "High Turning Date - " + _txt, text_color=txt_col_bear, text_size=table_text_size,bgcolor = color.new (color.gray, transp=60))
+                table.cell(gann_turning_dates, 1, table_cnt+k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=txt_col_bear, text_size=table_text_size,bgcolor = color.new (color.gray, transp=60))
+                table_cnt := table_cnt + 1 
+    
+    for k = 1 to nswing
+        for j = 2 to 10
+            cellDate := matrix.get(swingLowData, k, j-1)
+
+            if (j ==3)
+                _txt := "+22.5"
+            else if (j == 4)
+                _txt := "+45"
+            else if (j == 5)
+                _txt := "+90"
+            else if (j == 6)
+                _txt := "+135"
+            else if (j == 7)
+                _txt := "+180"
+            else if (j == 8)
+                _txt := "+225"
+            else if (j == 9)
+                _txt := "+270"
+            else 
+                _txt := "+315"
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(gann_turning_dates, 0, table_cnt+k+1, "Low Turning Date - " + _txt, text_color=txt_col_bull, text_size=table_text_size,bgcolor = color.new (color.gray, transp=60))
+                table.cell(gann_turning_dates, 1, table_cnt+k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=txt_col_bull, text_size=table_text_size, bgcolor = color.new (color.gray, transp=60))
+                table_cnt := table_cnt + 1 
+
+    for k = 1 to nswing
+        for j = 2 to 10
+            cellDate := matrix.get(HswingHighData, k, j-1)
+
+            if (j ==3)
+                _txt := "10D"
+            else if (j == 4)
+                _txt := "20D"
+            else if (j == 5)
+                _txt := "40D"
+            else if (j == 6)
+                _txt := "80D"
+            else if (j == 7)
+                _txt := "20W"
+            else if (j == 8)
+                _txt := "40W"
+            else if (j == 9)
+                _txt := "54W"
+            else 
+                _txt := "18M"
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(gann_turning_dates, 0, table_cnt+k+1, "Hurst Cycle High - " + _txt, text_color=txt_col_bear, text_size=table_text_size)
+                table.cell(gann_turning_dates, 1, table_cnt+k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=txt_col_bear, text_size=table_text_size)
+                table_cnt := table_cnt + 1 
+    
+    for k = 1 to nswing
+        for j = 2 to 10
+            cellDate := matrix.get(HswingLowData, k, j-1)
+
+            if (j ==3)
+                _txt := "10D"
+            else if (j == 4)
+                _txt := "20D"
+            else if (j == 5)
+                _txt := "40D"
+            else if (j == 6)
+                _txt := "80D"
+            else if (j == 7)
+                _txt := "20W"
+            else if (j == 8)
+                _txt := "40W"
+            else if (j == 9)
+                _txt := "54W"
+            else 
+                _txt := "18M"
+
+        
+            if (cellDate >= currentDate) and (cellDate <= fourteenDaysInFuture)
+                table.cell(gann_turning_dates, 0, table_cnt+k+1, "Hurst Cycle Low - " + _txt, text_color=txt_col_bull, text_size=table_text_size)
+                table.cell(gann_turning_dates, 1, table_cnt+k+1, str.format("{0,date,yyyy-MM-dd}", cellDate), text_color=txt_col_bull, text_size=table_text_size)
+                table_cnt := table_cnt + 1 
+    
+        
+        

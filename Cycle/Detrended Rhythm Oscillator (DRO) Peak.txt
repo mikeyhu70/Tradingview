@@ -1,0 +1,130 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+//
+// Detrended Rhythm Oscillator (DRO)
+// ----------------------------------
+// Uses a Detrended Price Oscillator to calculate detrended "zig zag" swings and plots the distance between the last High-High and Low-Low 
+//
+// Purpose:
+// A tool to measure and visualize the current dominant cycle (or rhythm/beat) in the dataset
+// Look for common length numbers on the Zig Zag turns to determine the current dominant cycle length, also check for harmonics (2x, 3x)
+// You can use the spotted length to optimize the length parameter of technical indicators (use the length or half of the length as input for any technical indicator)
+// A technical indicator with the "correct" length setting in regards to the current dominant cycle will provide much better signals
+//
+// References:
+// Zig Zag array functions used from open-source user "LonesomeTheBlue", script Name: "Double Zig Zag with HHLL"
+//
+// © WhenToTrade
+
+//@version=4
+study("Detrended Rhythm Oscillator (DRO) Peak", shorttitle="DRO_P", max_lines_count=30, max_bars_back=300, overlay = false)
+
+
+// { Inputs
+// -----------------------------------------------------------------------------
+indiversion     = input(              "DRO",   "==== Select Indicator ====", input.string , options=["DRO", "DPO", "BOTH"])
+src             = input(              high,                     "  Source", input.source )
+
+fastLength      = input(                  3,                "  Fast Length", type=input.integer, group="DPO")
+slowLength      = input(                 20,                "  Slow Length", type=input.integer, group="DPO")
+
+//... ZigZag
+zigperiod       = input(                 12,                     "  Period", input.integer, minval=5, group="ZigZag", inline="p")
+zigstyle        = input(           "Dashed",                     "  Line -", options = ["Dashed", "Dotted"], group="ZigZag", inline="line")
+zigwidth        = input(                  1,                  " Width  -- ", input.integer, options=[1,2,3], group="ZigZag", inline="line") 
+
+showdistanceS   = input(           "On",                         "  Labels", options = ["On", "Off"], group="ZigZag", inline="switch")
+showdetrendedS  = input(           "On",                       " Detrended", options = ["On", "Off"], group="ZigZag", inline="switch") 
+
+upcolor         = input(defval = #363A45, title = "  Colors:  Up", group="ZigZag", inline="color")
+downcolor       = input(defval = #363A45, title = " Down", group="ZigZag", inline="color")
+txtcol          = input(defval = #67E1E1, title = " Text", group="ZigZag", inline="color")
+
+//... Switches
+showdistance    = (showdistanceS == "On") ? true : false 
+showdetrended   = (showdetrendedS == "On") ? true : false  
+// } Inputs
+
+// { Variables
+// -----------------------------------------------------------------------------
+var max_array_size = 10
+var ziggyzags = array.new_float(0)
+var dir1 = 0
+var lastPivot=0
+var lastPivotDistance=0
+// } Variables
+
+// { Functions
+// -----------------------------------------------------------------------------
+
+add_to_zigzag(pointer, value, bindex)=>
+    array.unshift(pointer, bindex)
+    array.unshift(pointer, value)
+    if array.size(pointer) > max_array_size
+        array.pop(pointer)
+        array.pop(pointer)
+    
+update_zigzag(pointer, value, bindex, dir)=>
+    if array.size(pointer) == 0
+        add_to_zigzag(pointer, value, bindex)
+    else
+        if (dir == 1 and value > array.get(pointer, 0)) or (dir == -1 and value < array.get(pointer, 0))
+            array.set(pointer, 0, value)
+            array.set(pointer, 1, bindex)
+        0.
+
+// } Functions
+
+// { Calculations
+// -----------------------------------------------------------------------------
+
+//... DPO
+ppo = 100 * (ema(src, fastLength) - ema(src, slowLength)) / ema(src, slowLength)
+
+//... ZigZag
+float highs = highestbars(ppo, zigperiod) == 0 ? ppo : na
+float lows = lowestbars(ppo, zigperiod) == 0 ? ppo : na
+
+dir1 := iff(highs and na(lows), 1, iff(lows and na(highs), -1, dir1))
+
+dir1changed = change(dir1)
+if highs or lows
+    if dir1changed 
+        add_to_zigzag(ziggyzags, dir1 == 1 ? highs : lows, bar_index)
+    else
+        update_zigzag(ziggyzags, dir1 == 1 ? highs : lows, bar_index, dir1)
+
+// } Calculations
+
+// { Plots
+// -----------------------------------------------------------------------------
+
+//... Detrended Price Oscillator
+plot(indiversion=="DPO" or indiversion=="BOTH" ? ppo : na)
+
+//... Detrended Zig-Zag lines with distance labels
+if array.size(ziggyzags) >= 6
+    var line zzline1 = na
+    var label zzlabel1 = na
+    float val = array.get(ziggyzags, 0)
+    int point = round(array.get(ziggyzags, 1))
+    if change(val) or change(point)
+        float val1 = array.get(ziggyzags, 2)
+        int point1 = round(array.get(ziggyzags, 3))
+        lastPivotDistance:=point-lastPivot
+        plabel= tostring(point-lastPivot+lastPivotDistance[lastPivotDistance])
+        lastPivot:=point1
+        
+        if change(val1) == 0 and change(point1) == 0
+            if (dir1 == 1)
+                label.delete(zzlabel1)
+            line.delete(zzline1)
+            
+        if(indiversion=="DRO" or indiversion=="BOTH")
+            zzline1 := line.new(x1 = point, x2 = point1, y1 = showdetrended ? dir1 == 1 ? 100 : -100 : val , y2 = showdetrended ? dir1 == 1 ? -100 : 100 : val1, color = dir1 == 1 ? upcolor : downcolor, width = zigwidth, style = zigstyle == "Dashed" ? line.style_dashed: line.style_dotted)
+        
+        if ((indiversion=="DRO" or indiversion=="BOTH") and showdistance)
+            if (dir1 == 1)
+                zzlabel1 := label.new(x = point, y = showdetrended ? (dir1 == 1 ? 75 : -75) : val,  text = plabel, textcolor = txtcol, style = label.style_none, size=size.large) 
+                //zzlabel1 := label.new(x = point, y = val,  text = plabel, textcolor = txtcol, style = label.style_none) 
+            
+// } Plots       

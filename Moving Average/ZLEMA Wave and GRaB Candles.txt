@@ -1,0 +1,192 @@
+//@version=4
+//
+study("ZLEMA Wave and GRaB Candles Alt2", overlay=true, shorttitle="WAVEGRABALT2")
+
+//
+// Author: JustUncleL
+// Date  :24-March-2017
+//
+// Description:
+//   This is a specialised Price Action Channel (PAC) or Wave that mirrors the indicator used by
+//   Raghee Horner, the "34EMA Wave and GRaB Candles".
+//
+//   The Wave consist of
+//      - 34 period exponential moving average on the high
+//      - 34 period exponential moving average on the close
+//      - 34 period exponential moving average on the low
+//
+//   The GRaB candles colour scheme:
+//      - Lime    = Bull candle closed above Wave
+//      - Green   = Bear candle closed above Wave
+//      - Red     = Bull candle closed below Wave
+//      - DarkRed = Bear candle closed below Wave
+//      - Aqua    = Bull candle closed inside Wave
+//      - Blue    = Bear candle closed inside Wave
+//
+//   Optionally display a trend direction indication along bottom of chart.
+//
+// Reference:
+//   For some details on how Raghee uses this indicator check out
+//   - https://www.forexfactory.com/showthread.php?t=492080
+//   and her various training and webinar videos on Youtube
+//
+// Note: This code is licensed under open source GPLv3 terms and conditions. Any
+//       modifications to it should be made public and linked to the original code.
+//
+
+//
+// === INPUTS ===
+//
+ShowPAC = input(true, title="Show EMA Wave")
+ShowBarColor = input(true, title="Show Coloured GRaB Candles")
+ShowTrendIndi = input(false, title="Show Trend Indicator")
+//PACLen = input(34, minval=2, title="EMA Wave Length (34 by default)")
+PACLen = input(38, minval=2, title="EMA Wave Length (34 by default)")
+src = input(hl2, title="Source for Wave centre EMA")
+
+nma(src, length1, length2) =>
+    lambda = length1 / length2
+	alpha = lambda * (length1 - 1) / (length1 - lambda)
+	ma1 = ema(src, length1)
+	ma2 = ema(ma1, length2)
+	nma = (1 + alpha) * ma1 - alpha * ma2
+	
+dema(src, len) => 
+    ma1 = ema(src, len)
+    ma2 = ema(ma1, len)
+    2 * ma1 - ma2
+    
+eTma(_src, _len) =>
+    _tma = ema(ema(_src, _len), _len)
+    
+tma(_src, _len) =>
+  _tma = sma(sma(_src, _len), _len)
+    
+noma(_src,_len) =>
+    _noma = _src
+
+tema(src, len) => 
+    ma1 = ema(src, len)
+    ma2 = ema(ma1, len)
+    ma3 = ema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tdema(src, len) => 
+    ma1 = dema(src, len)
+    ma2 = dema(ma1, len)
+    ma3 = dema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+ttema(src, len) => 
+    ma1 = tema(src, len)
+    ma2 = tema(ma1, len)
+    ma3 = tema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tnma(src, len) => 
+    ma1 = nma(src, len, 3)
+    ma2 = nma(ma1, len, 3)
+    ma3 = nma(ma2, len, 3)
+    3 * (ma1 - ma2) + ma3
+
+hma(src, len) => wma(2*wma(src, len/2)-wma(src, len), round(sqrt(len)))
+
+thma(src, len) => 
+    ma1 = hma(src, len)
+    ma2 = hma(ma1, len)
+    ma3 = hma(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+zlema(src, len) =>
+	lag = round((len - 1) / 2)
+	zlsrc = src + (src - src[lag])
+	ema(zlsrc, len)
+
+zldema(src, len) =>
+	lag = round((len - 1) / 2)
+	zlsrc = src + (src - src[lag])
+	dema(zlsrc, len)
+	
+zltema(src, len) =>
+	lag = round((len - 1) / 2)
+	zlsrc = src + (src - src[lag])
+	tema(zlsrc, len)
+	
+dzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    2 * ma1 - ma2
+
+tzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+llema(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	ema(srcnew, len)
+	
+llsma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	sma(srcnew, len)
+	
+llhma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	hma(srcnew, len)
+	
+llwma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	wma(srcnew, len)
+	
+llrma(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	rma(srcnew, len)
+	
+lltema(src, len) =>
+	srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+	tema(srcnew, len)
+
+
+// --- CONSTANTS ---
+DodgerBlue = #1E90FF
+
+// === /INPUTS ===
+// Constants colours that include fully non-transparent option.
+green100 = #008000FF
+lime100 = #00FF00FF
+red100 = #FF0000FF
+blue100 = #0000FFFF
+aqua100 = #00FFFFFF
+darkred100 = #8B0000FF
+
+// === SERIES SETUP ===
+
+// Price action channel (Wave)
+pacCe = dzlema(src, PACLen)
+pacLo = dzlema(low, PACLen)
+pacHi = dzlema(high, PACLen)
+
+// === /SERIES ===
+
+
+// === PLOTTING ===
+// 
+// If selected, Plot the Wave Channel based on EMA high,low and close
+L = plot(ShowPAC ? pacLo : na, color=color.red, linewidth=2, style=plot.style_linebr, title="High Wave EMA", transp=80)
+H = plot(ShowPAC ? pacHi : na, color=color.green, linewidth=2, style=plot.style_linebr, title="Low Wave EMA", transp=80)
+C = plot(ShowPAC ? pacCe : na, color=color.silver, linewidth=2, style=plot.style_linebr, title="Centre Wave EMA", transp=80)
+fill(L, H, color=color.gray, transp=100, title="Fill Channel")
+
+// Colour bars according to the close position relative to the PAC selected.
+bColour = close >= open ? close >= pacHi ? lime100 : close <= pacLo ? red100 : aqua100 : 
+   close >= pacHi ? green100 : close <= pacLo ? darkred100 : blue100
+barcolor(ShowBarColor ? bColour : na, title="Bar Colours")
+
+// Show trend direction indication on the bottom
+wcolor = high > pacHi and low > pacHi ? color.lime : 
+   low < pacLo and high < pacLo ? color.red : color.gray
+plotshape(ShowTrendIndi ? src : na, color=wcolor, location=location.bottom, style=shape.square, size=size.small, transp=20, title="Trend Direction")
+
+// === /PLOTTING ===
+// eof

@@ -1,0 +1,578 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+//@version=5
+indicator("Hurst Diamond Notation Pivots 80D to 18Y", overlay=false)
+
+source_ = input(low, 'Source', group="Bandpass Settings")
+t = ticker.new(syminfo.prefix, syminfo.ticker)
+source = request.security(t, timeframe.period, source_)
+
+bandWidth0 = input.float(0.00625, 'Bandwidth 1 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth1 = input.float(0.00625, 'Bandwidth 2 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidthh = input.float(0.00625, 'Bandwidth 5 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidthf = input.float(0.00625, 'Bandwidth 10 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth2 = input.float(0.00625, 'Bandwidth 20 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth4 = input.float(0.00625, 'Bandwidth 40 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth8 = input.float(0.00625, 'Bandwidth 80 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth16 = input.float(0.00625, 'Bandwidth 20 Week', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth32 = input.float(0.00625, 'Bandwidth 40 Week', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth64 = input.float(0.00625, 'Bandwidth 18 Month', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth128 = input.float(0.00625, 'Bandwidth 54 Month', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth256 = input.float(0.00625, 'Bandwidth 9 Year', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth512 = input.float(0.00625, 'Bandwidth 18 Year', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+
+periodBandpass0 = input.float(1, '1 Day      ', minval=1, inline="1", group="Cycle Settings")
+periodBandpass1 = input.float(2, '2 Day    ', minval=1, inline="2", group="Cycle Settings")
+periodBandpassh = input.float(4, '5 Day      ', minval=2, inline="3", group="Cycle Settings")
+periodBandpassf = input.float(9, '10 Day    ', minval=2, inline="4", group="Cycle Settings")
+periodBandpass2 = input.float(17, '20 Day    ', minval=2, inline="5", group="Cycle Settings")
+periodBandpass4 = input.float(34, '40 Day    ', minval=2, inline="6", group="Cycle Settings")
+periodBandpass8 = input.float(68, '80 Day    ', minval=2, inline="7", group="Cycle Settings")
+periodBandpass16 = input.float(136, '20 Week ', minval=2, inline="8", group="Cycle Settings")
+periodBandpass32 = input.float(273, '40 Week ', minval=2, inline="9", group="Cycle Settings")
+periodBandpass64 = input.float(546, '18 Month', minval=2, inline="10", group="Cycle Settings")
+periodBandpass128 = input.float(1636.8, '54 Month', minval=2, inline="11", group="Cycle Settings")
+periodBandpass256 = input.float(3273.6, '9 Year    ', minval=2, inline="12", group="Cycle Settings")
+periodBandpass512 = input.float(6547.2, '18 Year  ', minval=2, inline="13", group="Cycle Settings")
+
+bpf_val = input.string(title ='bpf offset ?', defval="0", options=["0","22.5","45","90","180","-22.5","-45","-90","-180"])
+cycle_offset = input.int(1, "Cycle Offset", options=[0, 1, 2, 3, 4, 5, 6, 7, 8], group="Cycle Settings")
+
+ntradingdays = input.int(252, 'Number of Trading Days in a Year', minval=1)
+ncalendardays0 = input.int(252, 'Number of Days in a Year - 1 Day', minval=1)
+ncalendardays1 = input.int(252, 'Number of Days in a Year - 2 Day', minval=1)
+ncalendardaysh = input.int(264, 'Number of Days in a Year - 5 Day', minval=1)
+ncalendardaysf = input.int(264, 'Number of Days in a Year - 10 Day', minval=1)
+ncalendardays2 = input.int(264, 'Number of Days in a Year - 20 Day', minval=1)
+ncalendardays4 = input.int(264, 'Number of Days in a Year - 40 Day', minval=1)
+ncalendardays8 = input.int(264, 'Number of Days in a Year - 80 Day', minval=1)
+ncalendardays16 = input.int(365, 'Number of Days in a Year - 20 Week', minval=1)
+ncalendardays32 = input.int(365, 'Number of Days in a Year - 40 Week', minval=1)
+ncalendardays64 = input.int(365, 'Number of Days in a Year - 18 Month', minval=1)
+ncalendardays128 = input.int(365, 'Number of Days in a Year - 54 Month', minval=1)
+ncalendardays256 = input.int(365, 'Number of Days in a Year - 9 Year', minval=1)
+ncalendardays512 = input.int(365, 'Number of Days in a Year - 18 Year', minval=1)
+
+bpf(Series, float Period, Delta) =>
+    float tmpbpf = na 
+    if (bpf_val == "22.5")
+        var beta = math.cos(3.1415926535 * ((360+22.5)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720+45) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else if (bpf_val == "45")
+        var beta = math.cos(3.1415926535 * ((360+45)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720+90) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else if (bpf_val == "90")
+        var beta = math.cos(3.1415926535 * ((360+90)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720+180) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else if (bpf_val == "180")
+        var beta = math.cos(3.1415926535 * ((360+180)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720+360) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else if (bpf_val == "-22.5")
+        var beta = math.cos(3.1415926535 * ((360-22.5)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720-45) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else if (bpf_val == "-45")
+        var beta = math.cos(3.1415926535 * ((360-45)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720-90) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else if (bpf_val == "-90")
+        var beta = math.cos(3.1415926535 * ((360-90)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720-180) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else if (bpf_val == "-180")
+        var beta = math.cos(3.1415926535 * ((360-180)/ Period) / (180))
+        var gamma = 1 / math.cos(3.1415926535 * ((720-360) * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+    else
+        var beta = math.cos(3.1415926535 * (360 / Period) / 180)
+        var gamma = 1 / math.cos(3.1415926535 * (720 * Delta / Period) / 180)
+        var alpha = gamma - math.sqrt(gamma * gamma - 1)
+        tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+
+// Color Selection
+fld18y = #5E0F0B
+fld9y = #DB241A
+fld54m = #D47A35
+fld18m = #C4B727
+fld40w = #62E322
+fld20w = #3C8A15
+fld80 = #67A5A8
+fld40 = #161861
+fld20 = #9658E1
+fld10 = #D15C7B
+fld5 = #E386C2
+fld2 = #B80D18
+fld1 = #FF7F50
+fld5h = #FFB836
+fld0 = color.gray
+
+mode_multiplier2 = input.string(title='Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier2 = input(title='Bars in TF Period', defval=1)
+instrument_type = syminfo.type
+auto_multiplier_stock = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 6.5 / (timeframe.multiplier / 60)
+auto_multiplier_stock_extended = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 16 / (timeframe.multiplier / 60) - 1
+auto_multiplier_others = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 22 / (timeframe.multiplier / 60)
+_auto_multiplier2 = mode_multiplier2 == 'Manual' ? Multiplier2 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+
+BPF0 = bpf(source, periodBandpass0*ntradingdays/ncalendardays0*_auto_multiplier2, bandWidth0)
+BPF1 = bpf(source, periodBandpass1*ntradingdays/ncalendardays1*_auto_multiplier2, bandWidth1)
+BPFh = bpf(source, periodBandpassh*ntradingdays/ncalendardaysh*_auto_multiplier2, bandWidthh)
+BPFf = bpf(source, periodBandpassf*ntradingdays/ncalendardaysf*_auto_multiplier2, bandWidthf)
+BPF2 = bpf(source, periodBandpass2*ntradingdays/ncalendardays2*_auto_multiplier2, bandWidth2)
+BPF4 = bpf(source, periodBandpass4*ntradingdays/ncalendardays4*_auto_multiplier2, bandWidth4)
+BPF8 = bpf(source, periodBandpass8*ntradingdays/ncalendardays8*_auto_multiplier2, bandWidth8)
+BPF16 = bpf(source, periodBandpass16*ntradingdays/ncalendardays16*_auto_multiplier2, bandWidth16)
+BPF32 = bpf(source, periodBandpass32*ntradingdays/ncalendardays32*_auto_multiplier2, bandWidth32)
+BPF64 = bpf(source, periodBandpass64*ntradingdays/ncalendardays64*_auto_multiplier2, bandWidth64)
+BPF128 = bpf(source, periodBandpass128*ntradingdays/ncalendardays128*_auto_multiplier2, bandWidth128)
+BPF256 = bpf(source, periodBandpass256*ntradingdays/ncalendardays256*_auto_multiplier2, bandWidth256)
+BPF512 = bpf(source, periodBandpass512*ntradingdays/ncalendardays512*_auto_multiplier2, bandWidth512)
+
+// Bars Since Last Amp Hi & Lo
+
+hi0 = BPF0[2]<BPF0[1] and BPF0[1]>BPF0
+lo0 = BPF0[2]>BPF0[1] and BPF0[1]<BPF0
+
+hi1 = BPF1[2]<BPF1[1] and BPF1[1]>BPF1
+lo1 = BPF1[2]>BPF1[1] and BPF1[1]<BPF1
+
+hih = BPFh[2]<BPFh[1] and BPFh[1]>BPFh
+loh = BPFh[2]>BPFh[1] and BPFh[1]<BPFh
+
+hif = BPFf[2]<BPFf[1] and BPFf[1]>BPFf
+lof = BPFf[2]>BPFf[1] and BPFf[1]<BPFf
+
+hi2 = BPF2[2]<BPF2[1] and BPF2[1]>BPF2
+lo2 = BPF2[2]>BPF2[1] and BPF2[1]<BPF2
+
+hi4 = BPF4[2]<BPF4[1] and BPF4[1]>BPF4
+lo4 = BPF4[2]>BPF4[1] and BPF4[1]<BPF4
+
+hi8 = BPF8[2]<BPF8[1] and BPF8[1]>BPF8
+lo8 = BPF8[2]>BPF8[1] and BPF8[1]<BPF8
+
+hi16 = BPF16[2]<BPF16[1] and BPF16[1]>BPF16
+lo16 = BPF16[2]>BPF16[1] and BPF16[1]<BPF16
+
+hi32 = BPF32[2]<BPF32[1] and BPF32[1]>BPF32
+lo32 = BPF32[2]>BPF32[1] and BPF32[1]<BPF32
+
+hi64 = BPF64[2]<BPF64[1] and BPF64[1]>BPF64
+lo64 = BPF64[2]>BPF64[1] and BPF64[1]<BPF64
+
+hi128 = BPF128[2]<BPF128[1] and BPF128[1]>BPF128
+lo128 = BPF128[2]>BPF128[1] and BPF128[1]<BPF128
+
+hi256 = BPF256[2]<BPF256[1] and BPF256[1]>BPF256
+lo256 = BPF256[2]>BPF256[1] and BPF256[1]<BPF256
+
+hi512 = BPF512[2]<BPF512[1] and BPF512[1]>BPF512
+lo512 = BPF512[2]>BPF512[1] and BPF512[1]<BPF512
+
+
+xhi0 = ta.barssince(hi0)
+xlo0 = ta.barssince(lo0)
+
+xhi1 = ta.barssince(hi1)
+xlo1 = ta.barssince(lo1)
+
+xhih = ta.barssince(hih)
+xloh = ta.barssince(loh)
+
+xhif = ta.barssince(hif)
+xlof = ta.barssince(lof)
+
+xhi2 = ta.barssince(hi2)
+xlo2 = ta.barssince(lo2)
+
+xhi4 = ta.barssince(hi4)
+xlo4 = ta.barssince(lo4)
+
+xhi8 = ta.barssince(hi8)
+xlo8 = ta.barssince(lo8)
+
+xhi16 = ta.barssince(hi16)
+xlo16 = ta.barssince(lo16)
+
+xhi32 = ta.barssince(hi32)
+xlo32 = ta.barssince(lo32)
+
+xhi64 = ta.barssince(hi64)
+xlo64 = ta.barssince(lo64)
+
+xhi128 = ta.barssince(hi128)
+xlo128 = ta.barssince(lo128)
+
+xhi256 = ta.barssince(hi256)
+xlo256 = ta.barssince(lo256)
+
+xhi512 = ta.barssince(hi512)
+xlo512 = ta.barssince(lo512)
+
+
+// Wavelength    
+
+wavelength0 = math.round(math.abs(xhi0-xlo0)*2)
+wavelength1 = math.round(math.abs(xhi1-xlo1)*2)
+wavelengthh = math.round(math.abs(xhih-xloh)*2)
+wavelengthf = math.round(math.abs(xhif-xlof)*2)
+wavelength2 = math.round(math.abs(xhi2-xlo2)*2)
+wavelength4 = math.round(math.abs(xhi4-xlo4)*2)
+wavelength8 = math.round(math.abs(xhi8-xlo8)*2)
+wavelength16 = math.round(math.abs(xhi16-xlo16)*2)
+wavelength32 = math.round(math.abs(xhi32-xlo32)*2)
+wavelength64 = math.round(math.abs(xhi64-xlo64)*2)
+wavelength128 = math.round(math.abs(xhi128-xlo128)*2)
+wavelength256 = math.round(math.abs(xhi256-xlo256)*2)
+wavelength512 = math.round(math.abs(xhi512-xlo512)*2)
+
+ 
+philo = input.string("Lows", "Highs or Lows?", options=["Highs", "Lows"])
+linecolor = input.color(color.new(color.gray,0), "Label/Line Color")
+ptransp = input.int(33, "Radar Transparency", minval=0, maxval=100)
+ltransp = input.int(100, "Line Transparency", minval=0, maxval=100)
+
+n = bar_index
+
+// 
+// 80 days 
+//
+
+hcol = input.color(fld80, "80D Cycle", inline="hc")
+//cych = input.int(, "Length", inline="hc")
+cych = int(periodBandpass8/4)
+labh = input.bool(true, "Label?", inline="hc")
+labhf = input.bool(true, "Forecast?", inline="hc")
+plh = philo == "Highs" ? ta.pivotlow(BPF8,cych, cych) : ta.pivothigh(BPF8,cych, cych) // Define a PL or PH based on L/H Switch in settings
+plhy = philo == "Highs" ? -20 : 20 // Position the pivot on the Y axis of the oscillator
+plhi = ta.barssince(plh) // Bars since pivot occured?
+plhp = plhi>cych // Bars since pivot occured greater than cycle length?
+lowhin = philo == "Highs" ? ta.highest(close, cych*2) : ta.lowest(close, cych*2) // Highest/Lowest for the cycle
+lowh = ta.barssince(plh)>cych ? lowhin : na // If the barssince pivot are greater than cycle length, show the uncomnfirmed "pivot tracker"
+plot(plhy, "80D Cycle Radar Line", color=plhp?hcol:color.new(linecolor,ltransp), offset=(cych*-1), display=display.none) // Cycle detection lines v1
+plotshape(plh ? plhy : na, "80D Cycle Confirmed", style=shape.diamond, location=location.absolute, color=hcol, size = size.tiny, offset=(cych*-1)) // Past Pivots
+plotshape(lowh ? plhy : na, "80D Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(hcol, ptransp), size = size.tiny, offset=(cych*-1), show_last=1, display=display.none) // AKA the "Tracker/Radar" v1
+
+
+// LuxAlgo pivot average calculation used for the forecast
+barssince_ph = 0
+ph_x2 = ta.valuewhen(plh, n - cych, 1) // x values for pivot
+if plh
+    barssince_ph := (n - cych) - ph_x2 // if there is a pivot, then BarsSincePivot = (BarIndex - Cycle Length) - x values for pivot
+avg_barssince_ph = ta.cum(barssince_ph) / ta.cum(math.sign(barssince_ph)) // AvgBarsSincePivot = Sum of the BarsSincePivot divided by (Sum of the number of signs of BarsSincePivot, AKA the number of BarsSincePivots)
+
+
+// Draw a diamond forecast label and forecast range line
+tooltiph = "🔄 Pivot Cycle: " + str.tostring(cych) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(plhi + cych) + " bars ago" + 
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_ph)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_ph)-(plhi + cych)) + " bars" + 
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_ph/2)) + " bars"
+var label fh = na
+var line lh = na
+if  labhf
+    fh := label.new(n + math.min((math.round(avg_barssince_ph) - (plhi+cych)), 500), y=plhy, size=size.tiny, style=label.style_diamond, color=color.new(hcol,ptransp),tooltip =tooltiph) 
+    label.delete(fh[1])
+    lh := line.new(x1=n + math.min(math.round((avg_barssince_ph - (plhi+cych))-(avg_barssince_ph/4)), 500), x2=n + math.min(math.round((avg_barssince_ph - (plhi+cych))+(avg_barssince_ph/4)), 500), y1=plhy, y2=plhy, color=color.new(hcol,ptransp))
+    line.delete(lh[1]) 
+var label ch = na // Create a label
+if  labh // Define the label
+    ch := label.new(bar_index, y=plhy, text=str.tostring(cych), size=size.tiny, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(plhp?hcol:linecolor,0), tooltip=tooltiph) 
+    label.delete(ch[1])
+
+
+
+
+
+// 
+// 20 Week Cycle 
+//
+
+
+col = input.color(fld20w, "20W Cycle", inline="fc")
+//cyc = input.int(10, "Length", inline="fc")
+cyc = int(periodBandpass16/4)
+labf = input.bool(true, "Label?", inline="fc")
+labff = input.bool(true, "Forecast?", inline="fc")
+pl = philo == "Highs" ? ta.pivotlow(BPF16, cyc, cyc) : ta.pivothigh(BPF16, cyc, cyc)
+ply = philo == "Highs" ? -25 : 25
+pli = ta.barssince(pl)
+plp = pli>cyc
+lowin = philo == "Highs" ? ta.highest(close, cyc*2) : ta.lowest(close, cyc*2)
+lowf = ta.barssince(pl)>cyc ? lowin : na
+plot(ply, "20W Cycle Radar Line", color=plp?col:color.new(linecolor,ltransp), offset=(cyc*-1), display=display.none)
+plotshape(pl ? ply : na, "20W Cycle Confirmed", style=shape.diamond, location=location.absolute, color=col, size = size.tiny, offset=(cyc*-1))
+plotshape(lowf ? ply : na, "20W Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col, ptransp), size = size.tiny, offset=(cyc*-1), show_last=1, display=display.none)
+// Forecast & Labels 
+barssince_p = 0
+p_x2 = ta.valuewhen(pl, n - cyc, 1)
+p_y2 = ta.valuewhen(pl, pl, 1)
+if pl
+    barssince_p := (n - cyc) - p_x2
+avg_barssince_p = ta.cum(barssince_p) / ta.cum(math.sign(barssince_p))
+tooltipf = "🔄 Pivot Cycle: " + str.tostring(cyc) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pli + cyc) + " bars ago" + 
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p)-(pli + cyc)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p/2)) + " bars"
+var label ff = na
+var line lf = na
+if  labff
+    ff := label.new(n + math.min((math.round(avg_barssince_p) - (pli+cyc)), 500), y=ply, size=size.tiny, style=label.style_diamond, color=color.new(col,ptransp),tooltip =tooltipf) 
+    label.delete(ff[1])
+    lf := line.new(x1=n + math.min(math.round((avg_barssince_p - (pli+cyc))-(avg_barssince_p/4)), 500), x2=n + math.min(math.round((avg_barssince_p - (pli+cyc))+(avg_barssince_p/4)), 500), y1=ply, y2=ply, color=color.new(col,ptransp))
+    line.delete(lf[1])
+var label cf = na
+if  labf
+    cf := label.new(bar_index, y=ply, text=str.tostring(cyc), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(plp?col:linecolor,0), tooltip=tooltipf) 
+    label.delete(cf[1])
+
+
+
+// 
+// 40W Cycle 
+//
+
+
+col2 = input.color(fld40w, "40W Cycle", inline="2c")
+//cyc2 = input.int(20, "Length", inline="2c")
+cyc2 = int(periodBandpass32/4)
+lab2 = input.bool(true, "Label?", inline="2c")
+lab2f = input.bool(true, "Forecast?", inline="2c")
+pl2 = philo == "Highs" ? ta.pivotlow(BPF32,cyc2, cyc2) : ta.pivothigh(BPF32,cyc2, cyc2)
+pl2y = philo == "Highs" ? -30 : 30
+pl2i = ta.barssince(pl2)
+pl2p = pl2i>cyc2
+low2in = philo == "Highs" ? ta.highest(close, cyc2*2) : ta.lowest(close, cyc2*2)
+low2 = ta.barssince(pl2)>cyc2 ? low2in : na
+plot(pl2y, "40W Cycle Radar Line", color=pl2p?col2:color.new(linecolor,ltransp), offset=(cyc2*-1), display=display.none)
+plotshape(pl2 ? pl2y : na, "240WCycle Confirmed", style=shape.diamond, location=location.absolute, color=col2, size = size.tiny, offset=(cyc2*-1))
+plotshape(low2 ? pl2y : na, "40W Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col2, ptransp), size = size.tiny, offset=(cyc2*-1), show_last=1, display=display.none)
+// Forecast & Labels 
+barssince_p2 = 0
+p2_x2 = ta.valuewhen(pl2, n - cyc2, 1)
+p2_y2 = ta.valuewhen(pl2, pl2, 1)
+if pl2
+    barssince_p2 := (n - cyc2) - p2_x2
+avg_barssince_p2 = ta.cum(barssince_p2) / ta.cum(math.sign(barssince_p2))
+tooltip2 = "🔄 Pivot Cycle: " + str.tostring(cyc2) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl2i + cyc2) + " bars ago" + 
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p2)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p2)-(pl2i + cyc2)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p2/2)) + " bars"
+var label f2 = na
+var line l2 = na
+if  lab2f
+    f2 := label.new(n + math.min((math.round(avg_barssince_p2) - (pl2i+cyc2)), 500), y=pl2y, size=size.tiny, style=label.style_diamond, color=color.new(col2,ptransp),tooltip =tooltip2) 
+    label.delete(f2[1])
+    l2 := line.new(x1=n + math.min(math.round((avg_barssince_p2 - (pl2i+cyc2))-(avg_barssince_p2/4)), 500), x2=n + math.min(math.round((avg_barssince_p2 - (pl2i+cyc2))+(avg_barssince_p2/4)), 500), y1=pl2y, y2=pl2y, color=color.new(col2,ptransp))
+    line.delete(l2[1])
+var label c2 = na
+if  lab2
+    c2 := label.new(bar_index, y=pl2y, text=str.tostring(cyc2), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl2p?col2:linecolor,0), tooltip=tooltip2) 
+    label.delete(c2[1])
+
+
+
+
+
+
+// 
+// 18M Month Cycle
+//
+
+
+
+col4 = input.color(fld18m, "18 Month CYcle", inline="4c")
+//cyc4 = input.int(40, "Length", inline="4c")
+cyc4 = int(periodBandpass64/4)
+lab4 = input.bool(true, "Label?", inline="4c")
+lab4f = input.bool(true, "Forecast?", inline="4c")
+pl4 = philo == "Highs" ? ta.pivotlow(BPF64,cyc4, cyc4) : ta.pivothigh(BPF64,cyc4, cyc4)
+pl4y = philo == "Highs" ? -35 : 35
+pl4i = ta.barssince(pl4)
+pl4p = pl4i>cyc4
+low4in = philo == "Highs" ? ta.highest(close, cyc4): ta.lowest(close, cyc4)
+low4 = ta.barssince(pl4)>cyc4 ? low4in : na
+plot(pl4y, "18M Cycle Radar Line", color=pl4p?col4:color.new(linecolor,ltransp), offset=(cyc4*-1), display=display.none)
+plotshape(pl4 ? pl4y : na, "18M Cycle Confirmed", style=shape.diamond, location=location.absolute, color=col4, size = size.tiny, offset=(cyc4*-1))
+plotshape(low4 ? pl4y : na, "18M Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col4, ptransp), size = size.tiny, offset=(cyc4*-1), show_last=1, display=display.none)
+
+
+// Forecast & Labels 
+barssince_p4 = 0
+p4_x2 = ta.valuewhen(pl4, n - cyc4, 1)
+p4_y2 = ta.valuewhen(pl4, pl4, 1)
+if pl4
+    barssince_p4 := (n - cyc4) - p4_x2
+avg_barssince_p4 = ta.cum(barssince_p4) / ta.cum(math.sign(barssince_p4))
+tooltip4 = "🔄 Pivot Cycle: " + str.tostring(cyc4) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl4i + cyc4) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p4)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p4)-(pl4i + cyc4)) + " bars" + 
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p4/2)) + " bars"
+var label f4 = na
+var line l4 = na
+if  lab4f
+    f4 := label.new(n + math.min((math.round(avg_barssince_p4) - (pl4i+cyc4)), 500), y=pl4y, size=size.tiny, style=label.style_diamond, color=color.new(col4,ptransp),tooltip =tooltip4) 
+    label.delete(f4[1])
+    l4 := line.new(x1=n + math.min(math.round((avg_barssince_p4 - (pl4i+cyc4))-(avg_barssince_p4/4)), 500), x2=n + math.min(math.round((avg_barssince_p4 - (pl4i+cyc4))+(avg_barssince_p4/4)), 500), y1=pl4y, y2=pl4y, color=color.new(col4,ptransp))
+    line.delete(l4[1])
+var label c4 = na
+if  lab4
+    c4 := label.new(bar_index, y=pl4y, text=str.tostring(cyc4), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl4p?col4:linecolor,0), tooltip=tooltip4) 
+    label.delete(c4[1])
+
+
+
+
+// 
+// 54M Cycle
+//
+
+
+col8    = input.color(fld54m, "54 Month Cycle", inline="8c")
+//cyc8    = input.int(80, "Length", inline="8c")
+cyc8 = int(periodBandpass128/4)
+lab8 = input.bool(true, "Label?", inline="8c")
+lab8f = input.bool(true, "Forecast?", inline="8c")
+pl8     = philo == "Highs" ? ta.pivotlow(BPF128,cyc8, cyc8) : ta.pivothigh(BPF128,cyc8, cyc8)
+pl8y    = philo == "Highs" ? -40 : 40
+pl8i    = ta.barssince(pl8)
+pl8p    = pl8i>cyc8
+low8in  = philo == "Highs" ? ta.highest(close, cyc8) : ta.lowest(close, cyc8)
+low8= ta.barssince(pl8)>cyc4 ? low8in : na
+plot(pl8y, "54M Cycle Radar Line", color=pl8p?col8:color.new(linecolor,ltransp), offset=(cyc8*-1), display=display.none)
+plotshape(pl8 ? pl8y : na, "54M Cycle Confirmed", style=shape.diamond, location=location.absolute, color=col8, size = size.tiny, offset=(cyc8*-1))
+plotshape(low8 ? pl8y : na, "54M Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col8, ptransp), size = size.tiny, offset=(cyc8*-1), show_last=1, display=display.none)
+
+
+// Forecast & Labels 
+barssince_p8 = 0
+p8_x2 = ta.valuewhen(pl8, n - cyc8, 1)
+p8_y2 = ta.valuewhen(pl8, pl8, 1)
+if pl8
+    barssince_p8 := (n - cyc8) - p8_x2
+avg_barssince_p8 = ta.cum(barssince_p8) / ta.cum(math.sign(barssince_p8))
+tooltip8 = "🔄 Pivot Cycle: " + str.tostring(cyc8) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl8i + cyc8) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p8)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p8)-(pl8i + cyc8)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p8/2)) + " bars"
+var label f8 = na
+var line l8 = na
+if  lab8f
+    f8 := label.new(n + math.min((math.round(avg_barssince_p8) - (pl8i+cyc8)), 500), y=pl8y, size=size.tiny, style=label.style_diamond, color=color.new(col8,ptransp),tooltip =tooltip8) 
+    label.delete(f8[1])
+    l8 := line.new(x1=n + math.min(math.round((avg_barssince_p8 - (pl8i+cyc8))-(avg_barssince_p8/4)), 500), x2=n + math.min(math.round((avg_barssince_p8 - (pl8i+cyc8))+(avg_barssince_p8/4)), 500), y1=pl8y, y2=pl8y, color=color.new(col8,ptransp))
+    line.delete(l8[1])
+var label c8 = na
+if  lab8
+    c8 := label.new(bar_index, y=pl8y, text=str.tostring(cyc8), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl8p?col8:linecolor,0), tooltip=tooltip8) 
+    label.delete(c8[1])
+
+
+
+// 
+// 9Y Cycle 
+//
+
+
+col16 = input.color(fld9y, "9 Year Cycle", inline="16c")
+//cyc16 = input.int(160, "Length", inline="16c")
+cyc16 = int(periodBandpass256/4)
+lab16 = input.bool(true, "Label?", inline="16c")
+lab16f = input.bool(true, "Forecast?", inline="16c")
+pl16 = philo == "Highs" ? ta.pivotlow(BPF256,cyc16, cyc16) : ta.pivothigh(BPF256,cyc16, cyc16)
+pl16y = philo == "Highs" ? -45 : 45
+pl16i = ta.barssince(pl16)
+pl16p = pl16i>cyc16
+low16in = philo == "Highs" ? ta.highest(close, cyc16*2) : ta.lowest(close, cyc16*2)
+low16 = ta.barssince(pl16)>cyc16 ? low16in : na
+plot(pl16y, "19 Year Cycle Radar Line", color=pl16p?col16:color.new(linecolor,ltransp), offset=(cyc16*-1), display=display.none)
+plotshape(pl16 ? pl16y : na, "9 Year Cycle Confirmed", style=shape.diamond, location=location.absolute, color=col16, size = size.tiny, offset=(cyc16*-1))
+plotshape(low16 ? pl16y : na, "9 Year Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col16, ptransp), size = size.tiny, offset=(cyc16*-1), show_last=1, display=display.none)
+
+
+// Forecast & Labels 
+barssince_p16 = 0
+p16_x2 = ta.valuewhen(pl16, n - cyc16, 1)
+p16_y2 = ta.valuewhen(pl16, pl16, 1)
+if pl16
+    barssince_p16 := (n - cyc16) - p16_x2
+avg_barssince_p16 = ta.cum(barssince_p16) / ta.cum(math.sign(barssince_p16))
+tooltip16 = "🔄 Pivot Cycle: " + str.tostring(cyc16) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl16i + cyc16) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p16)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p16)-(pl16i + cyc16)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p16/2)) + " bars"
+var label f16 = na
+var line l16 = na
+if lab16f
+    f16 := label.new(n + math.min((math.round(avg_barssince_p16) - (pl16i+cyc16)), 500), y=pl16y, size=size.tiny, style=label.style_diamond, color=color.new(col16,ptransp),tooltip =tooltip16) 
+    label.delete(f16[1])
+    l16 := line.new(x1=n + math.min(math.round((avg_barssince_p16 - (pl16i+cyc16))-(avg_barssince_p16/4)), 500), x2=n + math.min(math.round((avg_barssince_p16 - (pl16i+cyc16))+(avg_barssince_p16/4)), 500), y1=pl16y, y2=pl16y, color=color.new(col16,ptransp))
+    line.delete(l16[1])
+var label c16 = na
+if  lab16
+    c16 := label.new(bar_index, y=pl16y, text=str.tostring(cyc16), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl16p?col16:linecolor,0), tooltip=tooltip16) 
+    label.delete(c16[1])
+
+
+
+// 
+// 18Y Cycle 
+//
+
+
+col32 = input.color(fld54m, "18 Year Cycle", inline="32c")
+//cyc32 = input.int(320, "Length", inline="32c")
+cyc32 = int(periodBandpass512/4)
+lab32 = input.bool(true, "Label?", inline="32c")
+lab32f = input.bool(true, "Forecast?", inline="32c")
+pl32 = philo == "Highs" ? ta.pivotlow(BPF512,cyc32, cyc32) : ta.pivothigh(BPF512,cyc32, cyc32)
+pl32y = philo == "Highs" ? -50 : 50
+pl32i = ta.barssince(pl32)
+pl32p = pl32i>cyc32
+low32in = philo == "Highs" ? ta.highest(close, cyc32*2) : ta.lowest(close, cyc32*2)
+low32 = ta.barssince(pl32)>cyc32 ? low32in : na
+plot(pl32y, "18Y Cycle Radar Line", color=pl32p?col32:color.new(linecolor,ltransp), offset=(cyc32*-1), display=display.none)
+plotshape(pl32 ? pl32y : na, "18Y Cycle Confirmed", style=shape.diamond, location=location.absolute, color=col32, size = size.tiny, offset=(cyc32*-1))
+plotshape(low32 ? pl32y : na, "18Y Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col32, ptransp), size = size.tiny, offset=(cyc32*-1), show_last=1, display=display.none)
+
+
+// Forecast & Labels 
+barssince_p32 = 0
+p32_x2 = ta.valuewhen(pl32, n - cyc32, 1)
+p32_y2 = ta.valuewhen(pl32, pl32, 1)
+if pl32
+    barssince_p32 := (n - cyc32) - p32_x2
+avg_barssince_p32 = ta.cum(barssince_p32) / ta.cum(math.sign(barssince_p32))
+tooltip32 = "🔄 Pivot Cycle: " + str.tostring(cyc32) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl32i + cyc32) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p32)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p32)-(pl32i + cyc32)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p32/2)) + " bars"
+var label f32 = na
+var line l32 = na
+if  lab32f
+    f32 := label.new(n + math.min((math.round(avg_barssince_p32) - (pl32i+cyc32)), 500), y=pl32y, size=size.tiny, style=label.style_diamond, color=color.new(col32,ptransp),tooltip =tooltip32) 
+    label.delete(f32[1])
+    l32 := line.new(x1=n + math.min(math.round((avg_barssince_p32 - (pl32i+cyc32))-(avg_barssince_p32/4)), 500), x2=n + math.min(math.round((avg_barssince_p32 - (pl32i+cyc32))+(avg_barssince_p32/4)), 500), y1=pl32y, y2=pl32y, color=color.new(col32,ptransp))
+    line.delete(l32[1])
+var label c32 = na
+if  lab32
+    c32 := label.new(bar_index, y=pl32y, text=str.tostring(cyc32), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl32p?col32:linecolor,0), tooltip=tooltip32) 
+    label.delete(c32[1])

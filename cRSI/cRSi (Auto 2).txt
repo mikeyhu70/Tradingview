@@ -1,0 +1,331 @@
+//@version=5
+// 
+// Copyright (C) 2017 CC BY, whentotrade / Lars von Thienen
+// Source:
+// Book: Decoding The Hidden Market Rhythm - Part 1: Dynamic Cycles (2017)
+// Chapter 4: "Fine-tuning technical indicators for more details on the cRSI Indicator
+// 
+// Usage: 
+// You need to derive the dominant cycle as input parameter for the cycle length as described in chapter 4.
+//
+// License: 
+// This work is licensed under a Creative Commons Attribution 4.0 International License.
+// You are free to share the material in any medium or format and remix, transform, and build upon the material for any purpose, 
+// even commercially. You must give appropriate credit to the authors book and website, provide a link to the license, and indicate 
+// if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use. 
+//
+indicator(title='RSI cyclic smoothed (Auto2)', shorttitle='cRSIa', max_bars_back=5000, max_lines_count=500)
+//
+import tbiktag/FFTLibrary/1 as fft
+//
+//
+
+// --- cRSI
+//src = close
+
+mode_domcycle = input.string(title="Auto Dominant Cycle Setting ?", defval='Manual', options=['Auto', 'Manual'])
+_domcycle = input.int(43, minval=10, title='Dominant Cycle Length')  //42.3
+_domcycle_min = input.int(20, minval=5, title='Auto Dominant Cycle Min') 
+_domcycle_max = input.int(120, minval=5, title='Auto Dominant Cycle Max') 
+//_domcycle_max = input.int(80, minval=10, title='Auto Dominant Cycle Max')  
+lookback = input.int(33, minval=1, title='Lookback (Auto Mode Only)') 
+factor = input.int(4, minval=1, title='Factor (vibration,levelling,cyclicmemory) for Band (Auto Mode Only)') 
+divider = input.int(2, minval=2, title='Cycle Divider') 
+autoN = input.int(title='Best Auto Dominant Cycle (lowest is more dominant)', defval=1, options=[1, 2, 3, 4, 5, 6, 7 ,8 ,9 ,10])
+
+mode_vibration = input.string(title="Auto Dominant Vibration ?", defval='Auto', options=['Auto', 'Manual'])
+_vibration = input.float(7.16, minval=0.0, title='vibration') // 32*0.5/3
+
+mode_leveling = input.string(title="Auto Dominant Leveling ?", defval='Auto', options=['Auto', 'Manual'])
+_leveling = input.float(5.375, minval=0.0, title='leveling') // 32*0.5/4
+
+
+//vibration = 10
+//leveling = 10.0
+//domcycle = input(20, minval=10, title="Dominant Cycle Length")
+
+// --- FFT --- 
+src = input.source(title='Source', defval=close, group='Input', inline='linei1')
+N = input.int(title='Lenth', defval=512, options=[8, 16, 20, 32, 40, 64, 80, 128, 140, 160, 200, 256, 512, 1024, 2048, 4096], group='Input', tooltip='Source and number of elements in the input dataset', inline='linei1')
+_domcycle_min2 = input.int(10, minval=1, title='Table Cycle Min Filtering') 
+_domcycle_max2 = input.int(100, minval=1, title='Table Cycle Max Filtering') 
+ispp = input.bool(title='Standardize Input Dataset', defval=false, group='Input', tooltip='Subtracts the mean of the data set from each element and normalizes the result ' + 'by the standard deviation')
+freqdomain = input.bool(title='Show Frequency-Domain Power Spectrum', defval=true, group='Output', tooltip='Plots the frequency spectrum of the squared magnitudes ' + 'of the Fourier coefficients (which are a measure of spectral power). ' + 'Zero frequency is omitted.')
+istable = input.bool(title='Dominant Cycles, Rows:', defval=true, group='Output', inline='lineo1')
+ntabfreqs = input.int(title='', defval=50, minval=1, group='Output', inline='lineo1', tooltip='Shows the table with the info about N most significant freqeuncy components. \n' + '-1st column: component number (N) \n' + '-2nd column: period of the component (in the units of input data resolution)  \n' + '-3d column:  relative power (normalized to the maximum power)')
+timedomain = input.bool(title='Show Inverse Fourier Transform (Filtered)', defval=false, group='Output', tooltip='Reconstructs and plots the dataset in the time domain, blocking ' + 'frequency components outside of the cutoff frequencies defined below.')
+ismoving = input.bool(title='Apply FFT Filter in a Moving Window', defval=false, group='Output', tooltip='Applies the filter for each bar within ' + 'the time range defined below.')
+islowthrs = input.bool(title='', defval=true, group='Filtered Fourier Components', inline='linef1')
+N_first = input.int(title='Lowest Allowed N', defval=0, minval=0, group='Filtered Fourier Components', tooltip='The number of the lowest frequency component allowed to pass. ' + 'Frequency components above it will be blocked.', inline='linef1')
+ishghthrs = input.bool(title='', defval=true, group='Filtered Fourier Components', inline='linef2')
+N_last = input.int(title='Highest Allowed N ', defval=10, minval=0, group='Filtered Fourier Components', tooltip='The number of the highest frequency component allowed to pass. ' + 'Frequency components above it will be blocked.', inline='linef2')
+fixedstart = input.bool(title='', group='Filtering Time Range', inline='linebac1', defval=false)
+filter_start = input.time(title='', inline='linebac1', group='Filtering Time Range', defval=timestamp('01 Jan 2020 13:30 +0000'), tooltip='If deactivated, filtering stars from the first available bar.')
+fixedend = input.bool(title='', group='Filtering Time Range', inline='linebac2', defval=false)
+filter_end = input.time(title='', inline='linebac2', group='Filtering Time Range', defval=timestamp('30 Dec 2080 23:30 +0000'), tooltip='If deactivated, filtering ends at the last available bar.')
+//
+//
+
+f_print(_txt,_shift, _values) => 
+    var _lbl = label(na), label.delete(_lbl), _lbl := label.new(time + (time-time[1])*_shift, _values, _txt, 
+     xloc.bar_time, yloc.price, style= label.style_none, size = size.small, color=#FFD700, textcolor=color.white)
+     
+
+// --- Initialiation ---
+bool    isinrange = (fixedstart ? time >= filter_start : true) and (fixedend ? time <= filter_end : true)
+var line[] tLines = array.new_line(N-1)
+var line[] fLines = array.new_line(N/2-2)
+//
+// Look back and see how many datapoints are available
+int m    = int(math.log(N)/math.log(2)) // approximate log2
+int newM = 0
+for j = 1 to m
+    if na(src[math.pow(2, j)])
+        break
+    newM := j
+// Use fewer datapoints, if there is not enough
+m := newM
+N := int(math.pow(2, newM))
+//
+//
+// -- Collect the data and apply FFT---
+float[] dat_re = array.new_float(na)
+float[] dat_im = array.new_float(na)
+if  N > 1 and (isinrange and ismoving or barstate.islast)
+    for i = 0 to N - 1
+        array.push(dat_re, src[i])
+        array.push(dat_im, 0.0)
+    if ispp
+        dat_re := array.standardize(dat_re)
+        dat_re
+    // forward FFT
+    fft.fft(dat_re, dat_im, "Forward")
+//
+//
+// Collect Fourier amplitudes squared (powers)
+float[] power = array.new_float(na)
+if barstate.islast and N > 1
+    for i = 0 to N-1
+        array.push(power,math.pow(array.get(dat_re,i),2) + math.pow(array.get(dat_im,i),2))
+    array.set(power,0,0.0) // make sure that the 0th component doesn't affect the power spectrum
+//
+//
+// -- Apply inverse FFT using selected frequency components --
+float[] dat_re_filt = array.new_float(N)
+float[] dat_im_filt = array.new_float(N)
+N_first := islowthrs ? math.min(math.min(N_first, N_last), N / 2) : 0
+N_last  := ishghthrs ? math.min(N_last, N / 2) : N / 2
+// Apply the bandpass filter
+if N > 1 and (isinrange and ismoving or barstate.islast)
+    array.fill(dat_re_filt, 0.0)
+    array.fill(dat_im_filt, 0.0)
+    for i = N_first to N_last by 1
+        array.set(dat_re_filt, i, array.get(dat_re, i))
+        array.set(dat_im_filt, i, array.get(dat_im, i))
+        if i != 0
+            array.set(dat_re_filt, N - i, array.get(dat_re, N - i))
+            array.set(dat_im_filt, N - i, array.get(dat_im, N - i))
+    //inverse FFT
+    fft.fft(dat_re_filt, dat_im_filt, "Inverse")
+//
+// Apply the filter to real-time data
+float src_filtered = ismoving and isinrange ? array.get(dat_re_filt, 0) : na
+
+
+//
+//
+// --- Plotting --- 
+// Time-domain subplot
+
+//if barstate.islast and timedomain and N > 1
+//    for i = 1 to N - 1
+//        float y_plt1 = array.get(dat_re_filt, i)
+//        float y_plt2 = array.get(dat_re_filt, i - 1)
+//        array.push(tLines, line.new(bar_index[i], y_plt1, bar_index[i - 1], y_plt2, width=2, color=#DE3163))
+//        line.delete(array.shift(tLines))
+//plot(ispp and ismoving and N > 1 ? 0.0 : na, color=color.new(color.silver, 0), title='zero', linewidth=1)
+//plot(src_filtered, color=color.new(#DE3163, 0), title='filtered', linewidth=2)
+
+// 
+// Frequency-domain subplot
+//if barstate.islast and freqdomain and N > 1
+//    float y_zero  = array.max(dat_re_filt)
+//    float y_scale = (array.max(dat_re_filt) - array.min(dat_re_filt)) / array.max(power)
+//    line  yax = line.new(bar_index, y_zero, bar_index[int(N / 2) + 5], y_zero, style=line.style_arrow_right, color=color.silver)
+//    label ylb = label.new(bar_index[int(N / 2) + 6], y_zero, text='f', style=label.style_none, textcolor=color.silver)
+//    line.delete( yax[1])
+//    label.delete(ylb[1])
+//    for i = 0 to int(N / 2)-2
+//        isinwindow = i >= N_first and i <= N_last
+//        float y_plt = array.get(power, i)
+//        array.push(fLines, line.new(bar_index[i], y_zero, bar_index[i], y_plt * y_scale + y_zero, width=3, color=isinwindow ? #DE3163 : #AED6F1) )
+//        line.delete(array.shift(fLines))
+
+
+
+// --- Frequency Table ---
+
+//auto_domcycle = 0.0
+done = false
+auto_domcycle = 0.0
+cnt = 1
+
+var table panel = table.new(position.top_right, 3, ntabfreqs + 1)
+if barstate.islast and istable and N > 1
+    ntabfreqs := math.min(ntabfreqs, N / 2)
+    // Table header
+    table.cell(panel, 0, 0, 'N', bgcolor=#AED6F1, text_size=size.small)
+    table.cell(panel, 1, 0, 'Cycle Period', bgcolor=#AED6F1, text_size=size.small)
+    table.cell(panel, 2, 0, 'Rel. Power', bgcolor=#AED6F1, text_size=size.small)
+    // drop zero frequency from power array and sort it
+    power_sorted = array.copy(power)
+    array.remove(power_sorted, 0)
+    
+    array.sort(power_sorted, order.descending)
+    //
+    for i = 0 to ntabfreqs - 1 by 1
+        // Period in left column
+        id = array.indexof(power, array.get(power_sorted, 2 * i))
+        period = float(N) / float(id)
+        if (period >= _domcycle_min) and (period <= _domcycle_max) and not done
+            if (cnt == autoN)
+                auto_domcycle := period
+                done := true
+                cnt := cnt + 1
+            else
+                cnt := cnt + 1
+    
+    array.sort(power_sorted, order.descending)
+    //
+    for i = 0 to ntabfreqs - 1 by 1
+        // Period in left column
+        id = array.indexof(power, array.get(power_sorted, 2 * i))
+        period = float(N) / float(id)
+        if (period <= _domcycle_max2) and (period >= _domcycle_min2)
+            table.cell(panel, 0, i + 1, str.format("{0,number,#}",id), bgcolor=#DFEEF7, text_size=size.small)
+            table.cell(panel, 1, i + 1, str.format("{0,number,#.#}",float(N) / float(id)), text_color=color.black, bgcolor=#DFEEF7, text_size=size.small)
+            table.cell(panel, 2, i + 1, str.format("{0,number,#.####}", array.get(power_sorted, 2 * i) / array.get(power_sorted, 0)), text_color=color.black, bgcolor=#DFEEF7, text_size=size.small)
+//
+
+
+
+// --- MAIN cRSI ---
+
+
+crsi = 0.0
+domcycle =  mode_domcycle == 'Auto' ?  math.max(auto_domcycle,math.round(lookback)) : _domcycle
+
+
+cyclelen = domcycle / divider
+
+//h1 = hline(30, color=color.silver, linestyle=hline.style_dashed)
+//h2 = hline(70, color=color.silver, linestyle=hline.style_dashed)
+
+auto_vibration = domcycle * 0.5 / 3 
+vibration = mode_vibration == 'Auto' ? mode_domcycle == 'Auto' ? math.max(auto_vibration,math.round(1/factor*lookback)) : auto_vibration  : _vibration
+
+
+auto_leveling = domcycle * 0.5 / 4 
+leveling = mode_leveling == 'Auto' ?  mode_domcycle == 'Auto'  ? math.max(auto_leveling,math.round(1/factor*lookback)) : auto_leveling : _leveling
+
+
+
+torque = 2.0 / (vibration + 1)
+phasingLag = (vibration - 1) / 2.0
+
+
+cyclicmemory = math.max(domcycle * 2,math.round(factor*lookback))
+//set min/max ranges?
+
+
+//up = ta.rma(math.max(ta.change(src), 0), cyclelen)
+//down = ta.rma(-math.min(ta.change(src), 0), cyclelen)
+
+upsrc = math.max(ta.change(src), 0)
+downsrc = -math.min(ta.change(src), 0)
+up = 0.0
+down = 0.0
+upsum = 0.0
+downsum = 0.0
+
+cyclelen1 = cyclelen
+
+alpha = 1 / (cyclelen1)
+
+for i = 0 to cyclelen1 - 1
+    upsum := upsum + upsrc[i] / cyclelen1
+up := na(up[1]) ? upsum : alpha * upsrc + (1 - alpha) * nz(up[1])
+
+
+for i = 0 to cyclelen1 - 1
+    downsum := downsum + downsrc[i] / cyclelen1
+down := na(down[1]) ? downsum : alpha * downsrc + (1 - alpha) * nz(down[1])
+
+
+
+rsi = down == 0 ? 100 : up == 0 ? 0 : 100 - 100 / (1 + up / down)
+crsi := torque * (2 * rsi - rsi[phasingLag]) + (1 - torque) * nz(crsi[1])
+
+
+
+lmax = -999999.0
+lmin = 999999.0
+for i = 0 to cyclicmemory - 1 by 1
+    if nz(crsi[i], -999999.0) > lmax
+        lmax := nz(crsi[i])
+        lmax
+    else
+        if nz(crsi[i], 999999.0) < lmin
+            lmin := nz(crsi[i])
+            lmin
+
+mstep = (lmax - lmin) / 100
+aperc = leveling / 100
+
+db = 0.0
+for steps = 0 to 100 by 1
+    testvalue = lmin + mstep * steps
+    above = 0
+    below = 0
+    for m = 0 to cyclicmemory - 1 by 1
+        below += (crsi[m] < testvalue ? 1 : 0)
+        below
+
+    ratio = below / cyclicmemory
+    if ratio >= aperc
+        db := testvalue
+        break
+    else
+        continue
+
+ub = 0.0
+for steps = 0 to 100 by 1
+    testvalue = lmax - mstep * steps
+    above = 0
+    for m = 0 to cyclicmemory - 1 by 1
+        above += (crsi[m] >= testvalue ? 1 : 0)
+        above
+
+    ratio = above / cyclicmemory
+    if ratio >= aperc
+        ub := testvalue
+        break
+    else
+        continue
+
+
+lowband = plot(db, 'LowBand', color.new(color.aqua, 0),linewidth=2)
+highband = plot(ub, 'HighBand', color.new(color.aqua, 0),linewidth=2)
+midband = plot((db+ub)/2, 'MidBand', color.new(color.silver, 60),linewidth=1)
+
+//fill(h1, h2, color=color.silver, transp=90)
+
+
+//fill(lowband, highband, color=color.new(color.gray, 90))
+plot(crsi, 'CRSI', color.new(color.fuchsia, 0), linewidth=2)
+
+str_auto_domcycle = str.tostring(auto_domcycle,'#.0')
+
+f_print("domcycle: " + str.tostring(domcycle,'#.0') + " | cyclelen: " + str.tostring(cyclelen,'#.0'),-15, ta.highest(ub,25)+10)
+f_print( "(auto) domcycle: " + str_auto_domcycle, -25 ,ta.lowest(db,15)-10)
+

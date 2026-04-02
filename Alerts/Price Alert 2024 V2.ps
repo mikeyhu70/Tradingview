@@ -1,0 +1,57 @@
+//@version=5
+indicator("Price Alert 2024", overlay=true)
+
+
+posLevel1 = input.float(2.5, "Positive Level 1 Price Move %", step=0.1)
+posLevel2 = input.float(5.0, "Positive Level 2 Price Move %", step=0.1)
+posLevel3 = input.float(7.5, "Positive Level 3 Price Move %", step=0.1)
+posLevel4 = input.float(10.0, "Positive Level 4 Price Move %", step=0.1)
+posLevel5 = input.float(12.5, "Positive Level 5 Price Move %", step=0.1)
+
+negLevel1 = input.float(-2.5, "Negative Level 1 Price Move %", step=0.1)
+negLevel2 = input.float(-5.0, "Negative Level 2 Price Move %", step=0.1)
+negLevel3 = input.float(-7.5, "Negative Level 3 Price Move %", step=0.1)
+negLevel4 = input.float(-10.0, "Negative Level 4 Price Move %", step=0.1)
+negLevel5 = input.float(-12.5, "Negative Level 5 Price Move %", step=0.1)
+
+priceChange = (close - open) / open * 100
+
+alertMessage(level) =>
+    direction = priceChange >= 0 ? "up" : "down"
+    syminfo.ticker + " has moved " + direction + " by " + str.tostring(math.abs(level)) + "% on the current bar. Last price: " + str.tostring(close)
+
+posLevel1Triggered = ta.barssince(priceChange >= posLevel1)[1] == 0 and priceChange >= posLevel1
+posLevel2Triggered = ta.barssince(priceChange >= posLevel2)[1] == 0 and priceChange >= posLevel2
+posLevel3Triggered = ta.barssince(priceChange >= posLevel3)[1] == 0 and priceChange >= posLevel3
+posLevel4Triggered = ta.barssince(priceChange >= posLevel4)[1] == 0 and priceChange >= posLevel4
+posLevel5Triggered = ta.barssince(priceChange >= posLevel5)[1] == 0 and priceChange >= posLevel5
+
+negLevel1Triggered = ta.barssince(priceChange <= negLevel1)[1] == 0 and priceChange <= negLevel1
+negLevel2Triggered = ta.barssince(priceChange <= negLevel2)[1] == 0 and priceChange <= negLevel2
+negLevel3Triggered = ta.barssince(priceChange <= negLevel3)[1] == 0 and priceChange <= negLevel3
+negLevel4Triggered = ta.barssince(priceChange <= negLevel4)[1] == 0 and priceChange <= negLevel4
+negLevel5Triggered = ta.barssince(priceChange <= negLevel5)[1] == 0 and priceChange <= negLevel5
+
+if posLevel1Triggered
+    alert(alertMessage(posLevel1))
+if posLevel2Triggered
+    alert(alertMessage(posLevel2))
+if posLevel3Triggered
+    alert(alertMessage(posLevel3))
+if posLevel4Triggered
+    alert(alertMessage(posLevel4))
+if posLevel5Triggered
+    alert(alertMessage(posLevel5))
+    
+if negLevel1Triggered
+    alert(alertMessage(negLevel1))
+if negLevel2Triggered
+    alert(alertMessage(negLevel2))
+if negLevel3Triggered
+    alert(alertMessage(negLevel3))
+if negLevel4Triggered
+    alert(alertMessage(negLevel4))
+if negLevel5Triggered
+    alert(alertMessage(negLevel5))
+
+

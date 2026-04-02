@@ -1,0 +1,666 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+//@version=5
+indicator("Hurst Diamond Notation Pivots 2023", overlay=false)
+ 
+philo = input.string("Lows", "Highs or Lows?", options=["Highs", "Lows"])
+linecolor = input.color(color.new(color.gray,0), "Label/Line Color")
+ptransp = input.int(77, "Radar Transparency", minval=0, maxval=100)
+ltransp = input.int(60, "Line Transparency", minval=0, maxval=100)
+
+n = bar_index
+ 
+// Input/2 (Default 5) Length Pivot Cycle
+
+//mode_fld0 = input.string(title='Auto FLD #0 Setting?', defval='Auto', options=['Auto', 'Manual'])
+//Period0 = input(title='FLD TF Period #0', defval=5.0)
+//mode_multiplier0 = input.string(title='FLD #0 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+//Multiplier0 = input(title='FLD #0 Bars in TF Period', defval=1)
+
+mode_fld = input.string(title='Auto FLD #1 Setting?', defval='Auto', options=['Auto', 'Manual'])
+Period = input(title='FLD TF Period #1', defval=10.0)
+mode_multiplier = input.string(title='FLD #1 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier = input(title='FLD #1 Bars in TF Period', defval=1)
+
+mode_fld2 = input.string(title='Auto FLD #2 Setting?', defval='Auto', options=['Auto', 'Manual'])
+Period2 = input(title='FLD TF Period #2', defval=20.0)
+mode_multiplier2 = input.string(title='FLD2 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier2 = input(title='FLD2 Bars in TF Period', defval=1)
+
+mode_fld3 = input.string(title='Auto FLD #3 Setting?', defval='Auto', options=['Auto', 'Manual'])
+Period3 = input(title='FLD TF Period #3', defval=40.0)
+mode_multiplier3 = input.string(title='FLD3 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier3 = input(title='FLD3 Bars in TF Period', defval=1)
+
+
+mode_fld4 = input.string(title='Auto FLD #4 Setting?', defval='Auto', options=['Auto', 'Manual'])
+Period4 = input(title='FLD TF Period #4', defval=80.0)
+mode_multiplier4 = input.string(title='FLD4 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier4 = input(title='FLD4 Bars in TF Period', defval=1)
+
+mode_fld5 = input.string(title='Auto FLD #5 Setting?', defval='Auto', options=['Auto', 'Manual'])
+Period5 = input(title='FLD TF Period #5', defval=140.0)
+mode_multiplier5 = input.string(title='FLD5 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier5 = input(title='FLD5 Bars in TF Period', defval=1)
+
+mode_fld6 = input.string(title='Auto FLD #6 Setting?', defval='Auto', options=['Auto', 'Manual'])
+Period6 = input(title='FLD TF Period #6', defval=280.0)
+mode_multiplier6 = input.string(title='FL6 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier6 = input(title='FLD6 Bars in TF Period', defval=1)
+
+mode_fld7 = input.string(title='Auto FLD #7 Setting?', defval='Auto', options=['Auto', 'Manual'])
+Period7 = input(title='FLD TF Period #7', defval=548.0)
+mode_multiplier7 = input.string(title='FLD7 Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier7 = input(title='FLD7 Bars in TF Period', defval=1)
+
+instrument_type = syminfo.type
+
+
+//auto_fld = timeframe.period == 'M' ? 17.0 : timeframe.period == 'W' ? 8.5 : 
+//   timeframe.period == 'D' ? 2.2 : timeframe.period == '240' ? 1.11 : timeframe.period == '120' ? 0.22 : 
+//   timeframe.period == '60' ? 0.22 : timeframe.period == '30' ? 0.11 : 
+//   timeframe.period == '15' ? 0.037 : timeframe.period == '10' ? 0.037 : timeframe.period == '5' ? 0.037 : 2.0
+
+//_auto_fld = mode_fld == 'Auto' ? auto_fld : Period
+
+//auto_fld2 = timeframe.period == 'M' ? 17.0 : timeframe.period == 'W' ? 8.5 : 
+//   timeframe.period == 'D' ? 4.3 : timeframe.period == '240' ? 2.2 : timeframe.period == '120' ? 1.11 : 
+//   timeframe.period == '60' ? 1.11 : timeframe.period == '30' ? 0.22 : 
+//   timeframe.period == '15' ? 0.11 : timeframe.period == '10' ? 0.11 : timeframe.period == '5' ? 0.11 : 4.0
+
+//_auto_fld2 = mode_fld2 == 'Auto' ? auto_fld2 : Period2
+
+
+//auto_fld3 = timeframe.period == 'M' ? 34.1 : timeframe.period == 'W' ? 17.0 : 
+//   timeframe.period == 'D' ? 8.5 : timeframe.period == '240' ? 4.3 : timeframe.period == '120' ? 2.2 : 
+//   timeframe.period == '60' ? 2.2 : timeframe.period == '30' ? 1.11 : 
+//   timeframe.period == '15' ? 0.22 : timeframe.period == '10' ? 0.11 : timeframe.period == '5' ? 0.11 : 8.5
+
+//_auto_fld3 = mode_fld3 == 'Auto' ? auto_fld3 : Period3
+
+
+//auto_fld4 = timeframe.period == 'M' ? 68.2 : timeframe.period == 'W' ? 34.1 : 
+//   timeframe.period == 'D' ? 17.0 : timeframe.period == '240' ? 8.5 : timeframe.period == '120' ? 4.3 : 
+//   timeframe.period == '60' ? 4.3 : timeframe.period == '30' ? 2.2 : 
+//   timeframe.period == '15' ? 1.11 : timeframe.period == '10' ? 0.22 : timeframe.period == '5' ? 0.11 : 17.0
+
+//_auto_fld4 = mode_fld4 == 'Auto' ? auto_fld4 : Period4
+
+//auto_fld5 = timeframe.period == 'M' ? 136.6 : timeframe.period == 'W' ? 68.2 : 
+//   timeframe.period == 'D' ? 34.1 : timeframe.period == '240' ? 17.0 : timeframe.period == '120' ? 8.5 : 
+//   timeframe.period == '60' ? 8.5 : timeframe.period == '30' ? 4.3 : 
+//   timeframe.period == '15' ? 2.2 : timeframe.period == '10' ? 1.11 : timeframe.period == '5' ? 0.22 : 34.1
+
+//_auto_fld5 = mode_fld5 == 'Auto' ? auto_fld5 : Period5
+
+//auto_fld6 = timeframe.period == 'M' ? 272.8 : timeframe.period == 'W' ? 136.4 : 
+//   timeframe.period == 'D' ? 68.2 : timeframe.period == '240' ? 34.1 : timeframe.period == '120' ? 17.0 : 
+//   timeframe.period == '60' ? 17.0 : timeframe.period == '30' ? 8.5 : 
+//   timeframe.period == '15' ? 4.3 : timeframe.period == '10' ? 2.2 : timeframe.period == '5' ? 1.11 : 68.2
+
+//_auto_fld6 = mode_fld6 == 'Auto' ? auto_fld6 : Period6
+
+//auto_fld7 = timeframe.period == 'M' ? 545.6 : timeframe.period == 'W' ? 272.8 : 
+//   timeframe.period == 'D' ? 136.4 : timeframe.period == '240' ? 68.2 : timeframe.period == '120' ? 34.1 : 
+//   timeframe.period == '60' ? 34.1 : timeframe.period == '30' ? 17.0 : 
+//   timeframe.period == '15' ? 8.5 : timeframe.period == '10' ? 4.3 : timeframe.period == '5' ? 2.2 : 136.4
+
+//_auto_fld7 = mode_fld7 == 'Auto' ? auto_fld7 : Period7
+
+auto_fld = timeframe.period == 'M' ? 34.1 : timeframe.period == 'W' ? 17.0 : 
+   timeframe.period == 'D' ? 8.5 : timeframe.period == '240' ? 5.0 : timeframe.period == '120' ? 2.0 : 
+   timeframe.period == '60' ? 2.0 : timeframe.period == '30' ? 1.00 : 
+   timeframe.period == '15' ? 0.20 : timeframe.period == '10' ? 0.10 : timeframe.period == '5' ? 0.10 : 8.5
+
+_auto_fld = mode_fld == 'Auto' ? auto_fld : Period
+
+
+auto_fld2 = timeframe.period == 'M' ? 68.2 : timeframe.period == 'W' ? 34.1 : 
+   timeframe.period == 'D' ? 17.0 : timeframe.period == '240' ? 8.5 : timeframe.period == '120' ? 5.0 : 
+   timeframe.period == '60' ? 5.0 : timeframe.period == '30' ? 2.0 : 
+   timeframe.period == '15' ? 1.00 : timeframe.period == '10' ? 0.20 : timeframe.period == '5' ? 0.10 : 17.0
+
+_auto_fld2 = mode_fld2 == 'Auto' ? auto_fld2 : Period2
+
+auto_fld3 = timeframe.period == 'M' ? 136.6 : timeframe.period == 'W' ? 68.2 : 
+   timeframe.period == 'D' ? 34.1 : timeframe.period == '240' ? 17.0 : timeframe.period == '120' ? 8.5 : 
+   timeframe.period == '60' ? 8.5 : timeframe.period == '30' ? 5.0 : 
+   timeframe.period == '15' ? 2.0 : timeframe.period == '10' ? 1.00 : timeframe.period == '5' ? 0.20 : 34.1
+
+_auto_fld3 = mode_fld3 == 'Auto' ? auto_fld3 : Period3
+
+auto_fld4 = timeframe.period == 'M' ? 272.8 : timeframe.period == 'W' ? 136.4 : 
+   timeframe.period == 'D' ? 68.2 : timeframe.period == '240' ? 34.1 : timeframe.period == '120' ? 17.0 : 
+   timeframe.period == '60' ? 17.0 : timeframe.period == '30' ? 8.5 : 
+   timeframe.period == '15' ? 5.0 : timeframe.period == '10' ? 2.0 : timeframe.period == '5' ? 1.00 : 68.2
+
+_auto_fld4 = mode_fld4 == 'Auto' ? auto_fld4 : Period4
+
+auto_fld5 = timeframe.period == 'M' ? 545.6 : timeframe.period == 'W' ? 272.8 : 
+   timeframe.period == 'D' ? 136.4 : timeframe.period == '240' ? 68.2 : timeframe.period == '120' ? 34.1 : 
+   timeframe.period == '60' ? 34.1 : timeframe.period == '30' ? 17.0 : 
+   timeframe.period == '15' ? 8.5 : timeframe.period == '10' ? 5.0 : timeframe.period == '5' ? 2.0 : 136.4
+
+_auto_fld5 = mode_fld5 == 'Auto' ? auto_fld5 : Period5
+
+auto_fld6 = timeframe.period == 'M' ? 1638.8 : timeframe.period == 'W' ? 545.6 : 
+   timeframe.period == 'D' ? 272.8 : timeframe.period == '240' ? 136.4 : timeframe.period == '120' ? 68.2 : 
+   timeframe.period == '60' ? 68.2 : timeframe.period == '30' ? 34.1 : 
+   timeframe.period == '15' ? 17.0 : timeframe.period == '10' ? 8.5 : timeframe.period == '5' ? 5.0 : 272.8
+
+_auto_fld6 = mode_fld6 == 'Auto' ? auto_fld6 : Period6
+
+auto_fld7 = timeframe.period == 'M' ? 3273.6 : timeframe.period == 'W' ? 1638.8 : 
+   timeframe.period == 'D' ? 545.6 : timeframe.period == '240' ? 272.8 : timeframe.period == '120' ? 136.4 : 
+   timeframe.period == '60' ? 136.4 : timeframe.period == '30' ? 68.2 : 
+   timeframe.period == '15' ? 34.1 : timeframe.period == '10' ? 17.0 : timeframe.period == '5' ? 8.5 : 545.6
+
+_auto_fld7 = mode_fld7 == 'Auto' ? auto_fld7 : Period7
+
+auto_multiplier_stock = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 6.5 / (timeframe.multiplier / 60)
+auto_multiplier_stock_extended = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 16 / (timeframe.multiplier / 60) - 1
+auto_multiplier_others = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 22 / (timeframe.multiplier / 60)
+
+
+//_auto_multiplier0 = mode_multiplier0 == 'Manual' ? Multiplier0 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier0 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier0 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier = mode_multiplier == 'Manual' ? Multiplier : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier2 = mode_multiplier2 == 'Manual' ? Multiplier2 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier3 = mode_multiplier3 == 'Manual' ? Multiplier3 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier3 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier4 = mode_multiplier4 == 'Manual' ? Multiplier4 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier4 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier5 = mode_multiplier5 == 'Manual' ? Multiplier5 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier5 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier6 = mode_multiplier6 == 'Manual' ? Multiplier6 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier6 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+_auto_multiplier7 = mode_multiplier7 == 'Manual' ? Multiplier7 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier7 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+
+f_weekdays(_len_in) =>
+    int _day = 0
+    float _rem = 0
+    float _ret = 0
+    var int _return = na
+
+    _len = math.ceil(_len_in)
+
+    _day := math.floor(_len / 7) * 5
+    _rem := _len - _day - 2 * math.floor(_len / 7)
+    if _rem <= 6 and _rem >= 5
+        _ret := _day + _rem
+        _ret
+    else if _rem == 4
+        if dayofweek == 4
+            _ret := _day + _rem  // no weekends overlap
+            _ret
+        else if dayofweek == 3
+            _ret := _day + _rem - 1
+            _ret
+        else if dayofweek == 2
+            _ret := _day + _rem - 2
+            _ret
+        else if dayofweek == 1
+            _ret := _day + _rem - 2
+            _ret
+        else
+            _ret := _day + _rem
+            _ret
+    else if _rem == 3
+        if dayofweek == 3
+            _ret := _day + _rem  // no weekends overlap
+            _ret
+        else if dayofweek == 2
+            _ret := _day + _rem - 1
+            _ret
+        else if dayofweek == 1
+            _ret := _day + _rem - 2
+            _ret
+        else
+            _ret := _day + _rem
+            _ret
+    else if _rem == 2
+        if dayofweek == 2
+            _ret := _day + _rem  //no weekends overlap
+            _ret
+        else if dayofweek == 1
+            _ret := _day + _rem - 1
+            _ret
+        else
+            _ret := _day + _rem
+            _ret
+    else
+        _ret := _day + _rem
+        _ret
+
+    if _len < 1
+        _ret := _len
+        _ret
+
+    _return := math.abs(math.ceil(_ret))
+    _return
+
+//_auto_fld0_new = 0.0
+_auto_fld_new = 0.0
+_auto_fld2_new = 0.0
+_auto_fld3_new = 0.0
+_auto_fld4_new = 0.0
+_auto_fld5_new = 0.0
+_auto_fld6_new = 0.0
+_auto_fld7_new = 0.0
+
+if timeframe.period == 'M' or timeframe.period == 'W'
+    //_auto_fld0_new := _auto_fld0
+    _auto_fld_new := _auto_fld
+    _auto_fld2_new := _auto_fld2
+    _auto_fld3_new := _auto_fld3
+    _auto_fld4_new := _auto_fld4
+    _auto_fld5_new := _auto_fld5
+    _auto_fld6_new := _auto_fld6
+    _auto_fld7_new := _auto_fld7
+else
+    //_auto_fld0_new := _auto_fld0
+    _auto_fld_new :=  _auto_fld
+    _auto_fld2_new := _auto_fld2
+    _auto_fld3_new := _auto_fld3
+    _auto_fld4_new := _auto_fld4
+    _auto_fld5_new := _auto_fld5
+    _auto_fld6_new := _auto_fld6
+    _auto_fld7_new := _auto_fld7
+    //_auto_fld0_new := _auto_fld0 > 1 ? f_weekdays(_auto_fld0) : _auto_fld0
+    //_auto_fld_new := _auto_fld > 1 ? f_weekdays(_auto_fld) : _auto_fld
+    //_auto_fld2_new := _auto_fld2 > 1 ? f_weekdays(_auto_fld2) : _auto_fld2
+    //_auto_fld3_new := _auto_fld3 > 1 ? f_weekdays(_auto_fld3) : _auto_fld3
+    //_auto_fld4_new := _auto_fld4 > 1 ? f_weekdays(_auto_fld4) : _auto_fld4
+    //_auto_fld5_new := _auto_fld5 > 1 ? f_weekdays(_auto_fld5) : _auto_fld5
+    //_auto_fld6_new := _auto_fld6 > 1 ? f_weekdays(_auto_fld6) : _auto_fld6
+    //_auto_fld7_new := _auto_fld7 > 1 ? f_weekdays(_auto_fld7) : _auto_fld7
+        
+
+
+////Multiply by 4 to get FLD color (a bit of cheating since for FLD 20 days , need to input 5
+
+//_auto_fld := _auto_fld * 4
+//_auto_fld2 := _auto_fld2 * 4
+//_auto_fld3 := _auto_fld3 * 4
+//_auto_fld4 := _auto_fld4 * 4
+//_auto_fld5 := _auto_fld5 * 4
+//_auto_fld6 := _auto_fld6 * 4
+//_auto_fld7 := _auto_fld7 * 4
+
+fld18y = #5E0F0B
+fld9y = #DB241A
+fld54m = #D47A35
+fld18m = #C4B727
+fld40w = #62E322
+fld20w = #3C8A15
+fld80 = #67A5A8
+fld40 = #161861
+fld20 = #9658E1
+fld10 = #D15C7B
+fld5 = #E386C2
+fld2 = #B80D18
+fld1 = #FF7F50
+fld5h = #FFB836
+fld0 = color.gray
+
+//color_fld0 = _auto_fld > 5500 ? fld18y : _auto_fld > 2500 ? fld9y : _auto_fld > 1000 ? fld54m : _auto_fld > 400 ? fld18m : _auto_fld > 200 ? fld40w : _auto_fld > 100 ? fld20w : _auto_fld > 55 ? fld80 : _auto_fld > 25 ? fld40 : _auto_fld > 12 ? fld20 : _auto_fld > 7 ? fld10 : _auto_fld > 3.2 ? fld5 : _auto_fld > 2 ? fld2 : _auto_fld > 1 ? fld1 : _auto_fld > 0.15 ? fld5h : fld0
+
+color_fld1 = _auto_fld > 5500 ? fld18y : _auto_fld > 2500 ? fld9y : _auto_fld > 1000 ? fld54m : _auto_fld > 400 ? fld18m : _auto_fld > 200 ? fld40w : _auto_fld > 100 ? fld20w : _auto_fld > 55 ? fld80 : _auto_fld > 25 ? fld40 : _auto_fld > 12 ? fld20 : _auto_fld > 7 ? fld10 : _auto_fld > 3.2 ? fld5 : _auto_fld > 2 ? fld2 : _auto_fld > 1 ? fld1 : _auto_fld > 0.15 ? fld5h : fld0
+
+color_fld2 = _auto_fld2 > 5500 ? fld18y : _auto_fld2 > 2500 ? fld9y : _auto_fld2 > 1000 ? fld54m : _auto_fld2 > 400 ? fld18m : _auto_fld2 > 200 ? fld40w : _auto_fld2 > 100 ? fld20w : _auto_fld2 > 55 ? fld80 : _auto_fld2 > 25 ? fld40 : _auto_fld2 > 12 ? fld20 : _auto_fld2 > 7 ? fld10 : _auto_fld2 > 3.2 ? fld5 : _auto_fld2 > 2 ? fld2 : _auto_fld2 > 1 ? fld1 : _auto_fld2 > 0.15 ? fld5h : fld0
+
+color_fld3 = _auto_fld3 > 5500 ? fld18y : _auto_fld3 > 2500 ? fld9y : _auto_fld3 > 1000 ? fld54m : _auto_fld3 > 400 ? fld18m : _auto_fld3 > 200 ? fld40w : _auto_fld3 > 100 ? fld20w : _auto_fld3 > 55 ? fld80 : _auto_fld3 > 25 ? fld40 : _auto_fld3 > 12 ? fld20 : _auto_fld3 > 7 ? fld10 : _auto_fld3 > 3.2 ? fld5 : _auto_fld3 > 2 ? fld2 : _auto_fld3 > 1 ? fld1 : _auto_fld3 > 0.15 ? fld5h : fld0
+
+color_fld4 = _auto_fld4 > 5500 ? fld18y : _auto_fld4 > 2500 ? fld9y : _auto_fld4 > 1000 ? fld54m : _auto_fld4 > 400 ? fld18m : _auto_fld4 > 200 ? fld40w : _auto_fld4 > 100 ? fld20w : _auto_fld4 > 55 ? fld80 : _auto_fld4 > 25 ? fld40 : _auto_fld4 > 12 ? fld20 : _auto_fld4 > 7 ? fld10 : _auto_fld4 > 3.2 ? fld5 : _auto_fld4 > 2 ? fld2 : _auto_fld4 > 1 ? fld1 : _auto_fld4 > 0.15 ? fld5h : fld0
+
+color_fld5 = _auto_fld5 > 5500 ? fld18y : _auto_fld5 > 2500 ? fld9y : _auto_fld5 > 1000 ? fld54m : _auto_fld5 > 400 ? fld18m : _auto_fld5 > 200 ? fld40w : _auto_fld5 > 100 ? fld20w : _auto_fld5 > 55 ? fld80 : _auto_fld5 > 25 ? fld40 : _auto_fld5 > 12 ? fld20 : _auto_fld5 > 7 ? fld10 : _auto_fld5 > 3.2 ? fld5 : _auto_fld5 > 2 ? fld2 : _auto_fld5 > 1 ? fld1 : _auto_fld5 > 0.15 ? fld5h : fld0
+
+color_fld6 = _auto_fld6 > 5500 ? fld18y : _auto_fld6 > 2500 ? fld9y : _auto_fld6 > 1000 ? fld54m : _auto_fld6 > 400 ? fld18m : _auto_fld6 > 200 ? fld40w : _auto_fld6 > 100 ? fld20w : _auto_fld6 > 55 ? fld80 : _auto_fld6 > 25 ? fld40 : _auto_fld6 > 12 ? fld20 : _auto_fld6 > 7 ? fld10 : _auto_fld6 > 3.2 ? fld5 : _auto_fld6 > 2 ? fld2 : _auto_fld6 > 1 ? fld1 : _auto_fld6 > 0.15 ? fld5h : fld0
+
+color_fld7 = _auto_fld7 > 5500 ? fld18y : _auto_fld7 > 2500 ? fld9y : _auto_fld7 > 1000 ? fld54m : _auto_fld7 > 400 ? fld18m : _auto_fld7 > 200 ? fld40w : _auto_fld7 > 100 ? fld20w : _auto_fld7 > 55 ? fld80 : _auto_fld7 > 25 ? fld40 : _auto_fld7 > 12 ? fld20 : _auto_fld7 > 7 ? fld10 : _auto_fld7 > 3.2 ? fld5 : _auto_fld7 > 2 ? fld2 : _auto_fld7 > 1 ? fld1 : _auto_fld7 > 0.15 ? fld5h : fld0
+
+
+
+
+
+//hcol = input.color(color.purple, "Half Cycle Color", inline="hc")
+hcol = color_fld1
+//cych = input.int(5, "Length", inline="hc")
+div1 = input.int(2, "FLD 1 Divider", inline="hc")
+cych = int(_auto_fld_new/div1)
+labh = input.bool(true, "FLD 1 Label?", inline="hc")
+labhf = input.bool(true, "FLD 1 Forecast?", inline="hc")
+plh = philo == "Highs" ? ta.pivothigh(cych, cych) : ta.pivotlow(cych, cych) // Define a PL or PH based on L/H Switch in settings
+plhy = philo == "Highs" ? -5 : 5 // Position the pivot on the Y axis of the oscillator
+plhi = ta.barssince(plh) // Bars since pivot occured?
+plhp = plhi>cych // Bars since pivot occured greater than cycle length?
+//lowhin = philo == "Highs" ? ta.highest(close, cych*2) : ta.lowest(close, cych*2) // Highest/Lowest for the cycle
+lowhin = philo == "Highs" ? ta.highest(high, cych*2) : ta.lowest(low, cych*2) // Highest/Lowest for the cycle
+lowh = ta.barssince(plh)>cych ? lowhin : na // If the barssince pivot are greater than cycle length, show the uncomnfirmed "pivot tracker"
+//plot(plhy, "Half Cycle Radar Line", color=plhp?hcol:color.new(linecolor,ltransp), offset=(cych*-1), display=display.none) // Cycle detection lines v1
+plot(plhy, "Half Cycle Radar Line", color=plhp?color.new(hcol,ltransp):color.new(linecolor,ltransp), offset=(cych*-1),linewidth=2) // Cycle detection lines v1
+//plotshape(plh ? plhy : na, "Half Cycle Confirmed", style=shape.diamond, location=location.absolute, color=hcol, size = size.small, offset=(cych*-1)) // Past Pivots
+plotshape(lowh ? plhy : na, "Half Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(hcol, ptransp), size = size.tiny, offset=(cych*-1), show_last=1) // AKA the "Tracker/Radar" v1
+// LuxAlgo pivot average calculation used for the forecast
+barssince_ph = 0
+ph_x2 = ta.valuewhen(plh, n - cych, 1) // x values for pivot
+if plh
+    barssince_ph := (n - cych) - ph_x2 // if there is a pivot, then BarsSincePivot = (BarIndex - Cycle Length) - x values for pivot
+avg_barssince_ph = ta.cum(barssince_ph) / ta.cum(math.sign(barssince_ph)) // AvgBarsSincePivot = Sum of the BarsSincePivot divided by (Sum of the number of signs of BarsSincePivot, AKA the number of BarsSincePivots)
+// Draw a diamond forecast label and forecast range line
+tooltiph = "🔄 Pivot Cycle: " + str.tostring(cych) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(plhi + cych) + " bars ago" + 
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_ph)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_ph)-(plhi + cych)) + " bars" + 
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_ph/2)) + " bars"
+var label fh = na
+var line lh = na
+if  labhf
+    fh := label.new(n + math.min((math.round(avg_barssince_ph) - (plhi+cych)), 500), y=plhy, size=size.tiny, style=label.style_diamond, color=color.new(hcol,ptransp),tooltip =tooltiph) 
+    label.delete(fh[1])
+    lh := line.new(x1=n + math.min(math.round((avg_barssince_ph - (plhi+cych))-(avg_barssince_ph/2)), 500), x2=n + math.min(math.round((avg_barssince_ph - (plhi+cych))+(avg_barssince_ph/2)), 500), y1=plhy, y2=plhy, color=color.new(hcol,ptransp))
+    line.delete(lh[1]) 
+var label ch = na // Create a label
+if  labh // Define the label
+    ch := label.new(bar_index, y=plhy, text=str.tostring(cych), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(plhp?hcol:linecolor,0), tooltip=tooltiph) 
+    label.delete(ch[1])
+
+
+
+
+
+
+// Input (Default 10) Length Pivot Cycle
+col = color_fld2
+//col = input.color(color.blue, "Full Cycle Color", inline="fc")
+//cyc = input.int(10, "Length", inline="fc")
+div2 = input.int(2, "FLD 2 Divider", inline="fc")
+cyc = int(_auto_fld2_new/div2)
+labf = input.bool(true, "FLD 2 Label?", inline="fc")
+labff = input.bool(true, "FLD 2 Forecast?", inline="fc")
+pl = philo == "Highs" ? ta.pivothigh(cyc, cyc) : ta.pivotlow(cyc, cyc)
+ply = philo == "Highs" ? -10 : 10
+pli = ta.barssince(pl)
+plp = pli>cyc
+//lowin = philo == "Highs" ? ta.highest(close, cyc*2) : ta.lowest(close, cyc*2)
+lowin = philo == "Highs" ? ta.highest(high, cyc*2) : ta.lowest(low, cyc*2)
+lowf = ta.barssince(pl)>cyc ? lowin : na
+plot(ply, "Full Cycle Radar Line", color=plp?col:color.new(linecolor,ltransp), offset=(cyc*-1), display=display.none)
+////plot(ply, "Full Cycle Radar Line", color=plp?col:color.new(linecolor,ltransp), offset=(cyc*-1),linewidth=2)
+plotshape(pl ? ply : na, "Full Cycle Confirmed", style=shape.diamond, location=location.absolute, color=color.new(col,ptransp), size = size.small, offset=(cyc*-1))
+//plotshape(lowf ? ply : na, "Full Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col, ptransp), size = size.small, offset=(cyc*-1), show_last=1, display=display.none)
+plotshape(lowf ? ply : na, "Full Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col, ptransp), size = size.tiny, offset=(cyc*-1), show_last=1)
+// Forecast & Labels 
+barssince_p = 0
+p_x2 = ta.valuewhen(pl, n - cyc, 1)
+p_y2 = ta.valuewhen(pl, pl, 1)
+if pl
+    barssince_p := (n - cyc) - p_x2
+avg_barssince_p = ta.cum(barssince_p) / ta.cum(math.sign(barssince_p))
+tooltipf = "🔄 Pivot Cycle: " + str.tostring(cyc) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pli + cyc) + " bars ago" + 
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p)-(pli + cyc)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p/2)) + " bars"
+var label ff = na
+var line lf = na
+if  labff
+    ff := label.new(n + math.min((math.round(avg_barssince_p) - (pli+cyc)), 500), y=ply, size=size.tiny, style=label.style_diamond, color=color.new(col,ptransp),tooltip =tooltipf) 
+    label.delete(ff[1])
+    lf := line.new(x1=n + math.min(math.round((avg_barssince_p - (pli+cyc))-(avg_barssince_p/2)), 500), x2=n + math.min(math.round((avg_barssince_p - (pli+cyc))+(avg_barssince_p/2)), 500), y1=ply, y2=ply, color=color.new(col,ptransp))
+    line.delete(lf[1])
+var label cf = na
+if  labf
+    cf := label.new(bar_index, y=ply, text=str.tostring(cyc), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(plp?col:linecolor,0), tooltip=tooltipf) 
+    label.delete(cf[1])
+
+
+
+
+
+
+
+// Input x2 (Default 20) Length Pivot Cycle
+col2 =  color_fld3
+//col2 = input.color(color.aqua, "2x Cycle Color  ", inline="2c")
+//cyc2 = input.int(17, "Length", inline="2c")
+div3 = input.int(2, "FLD 3 Divider", inline="2c")
+cyc2=int(_auto_fld3_new/div3)
+lab2 = input.bool(true, "FLD 3 Label?", inline="2c")
+lab2f = input.bool(true, "FLD 3 Forecast?", inline="2c")
+pl2 = philo == "Highs" ? ta.pivothigh(cyc2, cyc2) : ta.pivotlow(cyc2, cyc2)
+pl2y = philo == "Highs" ? -15 : 15
+pl2i = ta.barssince(pl2)
+pl2p = pl2i>cyc2
+//low2in = philo == "Highs" ? ta.highest(close, cyc2*2) : ta.lowest(close, cyc2*2)
+low2in = philo == "Highs" ? ta.highest(high, cyc2*2) : ta.lowest(low, cyc2*2)
+low2 = ta.barssince(pl2)>cyc2 ? low2in : na
+plot(pl2y, "2x Cycle Radar Line", color=pl2p?col2:color.new(linecolor,ltransp), offset=(cyc2*-1), display=display.none)
+plotshape(pl2 ? pl2y : na, "2x Cycle Confirmed", style=shape.diamond, location=location.absolute, color=color.new(col2,ptransp), size = size.small, offset=(cyc2*-1))
+//plotshape(low2 ? pl2y : na, "2x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col2, ptransp), size = size.small, offset=(cyc2*-1), show_last=1, display=display.none)
+//plot(pl2y, "2x Cycle Radar Line", color=pl2p?col2:color.new(linecolor,ltransp), offset=(cyc2*-1), linewidth=2)
+plotshape(low2 ? pl2y : na, "2x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col2, ptransp), size = size.tiny, offset=(cyc2*-1), show_last=1)
+// Forecast & Labels 
+barssince_p2 = 0
+p2_x2 = ta.valuewhen(pl2, n - cyc2, 1)
+p2_y2 = ta.valuewhen(pl2, pl2, 1)
+if pl2
+    barssince_p2 := (n - cyc2) - p2_x2
+avg_barssince_p2 = ta.cum(barssince_p2) / ta.cum(math.sign(barssince_p2))
+tooltip2 = "🔄 Pivot Cycle: " + str.tostring(cyc2) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl2i + cyc2) + " bars ago" + 
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p2)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p2)-(pl2i + cyc2)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p2/2)) + " bars"
+var label f2 = na
+var line l2 = na
+if  lab2f
+    f2 := label.new(n + math.min((math.round(avg_barssince_p2) - (pl2i+cyc2)), 500), y=pl2y, size=size.tiny, style=label.style_diamond, color=color.new(col2,ptransp),tooltip =tooltip2) 
+    label.delete(f2[1])
+    l2 := line.new(x1=n + math.min(math.round((avg_barssince_p2 - (pl2i+cyc2))-(avg_barssince_p2/2)), 500), x2=n + math.min(math.round((avg_barssince_p2 - (pl2i+cyc2))+(avg_barssince_p2/2)), 500), y1=pl2y, y2=pl2y, color=color.new(col2,ptransp))
+    line.delete(l2[1])
+var label c2 = na
+if  lab2
+    c2 := label.new(bar_index, y=pl2y, text=str.tostring(cyc2), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl2p?col2:linecolor,0), tooltip=tooltip2) 
+    label.delete(c2[1])
+
+
+
+
+
+
+
+
+// Input x4 (Default 40) Length Pivot Cycle
+col4 = color_fld4
+//col4 = input.color(color.green, "4x Cycle Color  ", inline="4c")
+//cyc4 = input.int(34, "Length", inline="4c")
+div4 = input.int(2, "FLD 4 Divider", inline="4c")
+cyc4=int(_auto_fld4_new/div4)
+lab4 = input.bool(true, "FLD 4 Label?", inline="4c")
+lab4f = input.bool(true, "FLD 4 Forecast?", inline="4c")
+pl4 = philo == "Highs" ? ta.pivothigh(cyc4, cyc4) : ta.pivotlow(cyc4, cyc4)
+pl4y = philo == "Highs" ? -20 : 20
+pl4i = ta.barssince(pl4)
+pl4p = pl4i>cyc4
+//low4in = philo == "Highs" ? ta.highest(close, cyc4*2): ta.lowest(close, cyc4*2)
+low4in = philo == "Highs" ? ta.highest(high, cyc4*2): ta.lowest(low, cyc4*2)
+low4 = ta.barssince(pl4)>cyc4 ? low4in : na
+plot(pl4y, "4x Cycle Radar Line", color=pl4p?col4:color.new(linecolor,ltransp), offset=(cyc4*-1), display=display.none)
+plotshape(pl4 ? pl4y : na, "4x Cycle Confirmed", style=shape.diamond, location=location.absolute, color=color.new(col4,ptransp), size = size.small, offset=(cyc4*-1))
+//plotshape(low4 ? pl4y : na, "4x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col4, ptransp), size = size.small, offset=(cyc4*-1), show_last=1, display=display.none)
+//plot(pl4y, "4x Cycle Radar Line", color=pl4p?col4:color.new(linecolor,ltransp), offset=(cyc4*-1), linewidth=2)
+plotshape(low4 ? pl4y : na, "4x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col4, ptransp), size = size.tiny, offset=(cyc4*-1), show_last=1)
+// Forecast & Labels 
+barssince_p4 = 0
+p4_x2 = ta.valuewhen(pl4, n - cyc4, 1)
+p4_y2 = ta.valuewhen(pl4, pl4, 1)
+if pl4
+    barssince_p4 := (n - cyc4) - p4_x2
+avg_barssince_p4 = ta.cum(barssince_p4) / ta.cum(math.sign(barssince_p4))
+tooltip4 = "🔄 Pivot Cycle: " + str.tostring(cyc4) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl4i + cyc4) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p4)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p4)-(pl4i + cyc4)) + " bars" + 
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p4/2)) + " bars"
+var label f4 = na
+var line l4 = na
+if  lab4f
+    f4 := label.new(n + math.min((math.round(avg_barssince_p4) - (pl4i+cyc4)), 500), y=pl4y, size=size.tiny, style=label.style_diamond, color=color.new(col4,ptransp),tooltip =tooltip4) 
+    label.delete(f4[1])
+    l4 := line.new(x1=n + math.min(math.round((avg_barssince_p4 - (pl4i+cyc4))-(avg_barssince_p4/2)), 500), x2=n + math.min(math.round((avg_barssince_p4 - (pl4i+cyc4))+(avg_barssince_p4/2)), 500), y1=pl4y, y2=pl4y, color=color.new(col4,ptransp))
+    line.delete(l4[1])
+var label c4 = na
+if  lab4
+    c4 := label.new(bar_index, y=pl4y, text=str.tostring(cyc4), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl4p?col4:linecolor,0), tooltip=tooltip4) 
+    label.delete(c4[1])
+
+
+
+
+
+
+
+
+
+
+// Input x8 (Default 80) Length Pivot Cycle
+col8 = color_fld5
+//col8    = input.color(color.yellow, "8x Cycle Color  ", inline="8c")
+//cyc8    = input.int(68, "Length", inline="8c")
+div5 = input.int(2, "FLD 5 Divider", inline="8c")
+cyc8=int(_auto_fld5_new/div5)
+lab8 = input.bool(true, "FLD 5 Label?", inline="8c")
+lab8f = input.bool(true, "FLD 5 Forecast?", inline="8c")
+pl8     = philo == "Highs" ? ta.pivothigh(cyc8, cyc8) : ta.pivotlow(cyc8, cyc8)
+pl8y    = philo == "Highs" ? -25 : 25
+pl8i    = ta.barssince(pl8)
+pl8p    = pl8i>cyc8
+//low8in  = philo == "Highs" ? ta.highest(close, cyc8*2) : ta.lowest(close, cyc8*2)
+low8in  = philo == "Highs" ? ta.highest(high, cyc8*2) : ta.lowest(low, cyc8*2)
+low8t    = ta.barssince(pl8)>cyc8 ? low8in : na
+low8p    = ta.barssince(low8in)
+plot(pl8y, "8x Cycle Radar Line", color=pl8p?col8:color.new(linecolor,ltransp), offset=(cyc8*-1), display=display.none)
+plotshape(pl8 ? pl8y : na, "8x Cycle Confirmed", style=shape.diamond, location=location.absolute, color=color.new(col8,ptransp), size = size.small, offset=(cyc8*-1))
+//plotshape(low8t ? pl8y : na, "8x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col8, ptransp), size = size.small, offset=(cyc8*-1), show_last=1, display=display.none)
+//plot(pl8y, "8x Cycle Radar Line", color=pl8p?col8:color.new(linecolor,ltransp), offset=(cyc8*-1), linewidth=2)
+plotshape(low8t ? pl8y : na, "8x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col8, ptransp), size = size.tiny, offset=(cyc8*-1), show_last=1)
+// Forecast & Labels 
+barssince_p8 = 0
+p8_x2 = ta.valuewhen(pl8, n - cyc8, 1)
+p8_y2 = ta.valuewhen(pl8, pl8, 1)
+if pl8
+    barssince_p8 := (n - cyc8) - p8_x2
+avg_barssince_p8 = ta.cum(barssince_p8) / ta.cum(math.sign(barssince_p8))
+tooltip8 = "🔄 Pivot Cycle: " + str.tostring(cyc8) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl8i + cyc8) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p8)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p8)-(pl8i + cyc8)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p8/2)) + " bars"
+var label f8 = na
+var line l8 = na
+if  lab8f
+    f8 := label.new(n + math.min((math.round(avg_barssince_p8) - (pl8i+cyc8)), 500), y=pl8y, size=size.tiny, style=label.style_diamond, color=color.new(col8,ptransp),tooltip =tooltip8) 
+    label.delete(f8[1])
+    l8 := line.new(x1=n + math.min(math.round((avg_barssince_p8 - (pl8i+cyc8))-(avg_barssince_p8/2)), 500), x2=n + math.min(math.round((avg_barssince_p8 - (pl8i+cyc8))+(avg_barssince_p8/2)), 500), y1=pl8y, y2=pl8y, color=color.new(col8,ptransp))
+    line.delete(l8[1])
+var label c8 = na
+if  lab8
+    c8 := label.new(bar_index, y=pl8y, text=str.tostring(cyc8), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl8p?col8:linecolor,0), tooltip=tooltip8) 
+    label.delete(c8[1])
+
+
+
+
+
+
+
+
+// Input x16 (Default 160) Length Pivot Cycle
+col16 = color_fld6
+//col16 = input.color(color.orange, "16x Cycle Color", inline="16c")
+//cyc16 = input.int(136, "Length", inline="16c")
+div6 = input.int(4, "FLD 6 Divider", inline="16c")
+cyc16=int(_auto_fld6_new/div6)
+lab16 = input.bool(true, "FLD 6 Label?", inline="16c")
+lab16f = input.bool(true, "FLD 6 Forecast?", inline="16c")
+pl16 = philo == "Highs" ? ta.pivothigh(cyc16, cyc16) : ta.pivotlow(cyc16, cyc16)
+pl16y = philo == "Highs" ? -30 : 30
+pl16i = ta.barssince(pl16)
+pl16p = pl16i>cyc16
+//low16in = philo == "Highs" ? ta.highest(close, cyc16*2) : ta.lowest(close, cyc16*2)
+low16in = philo == "Highs" ? ta.highest(high, cyc16*2) : ta.lowest(low, cyc16*2)
+low16 = ta.barssince(pl16)>cyc16 ? low16in : na
+plot(pl16y, "16x Cycle Radar Line", color=pl16p?col16:color.new(linecolor,ltransp), offset=(cyc16*-1), display=display.none)
+plotshape(pl16 ? pl16y : na, "16x Cycle Confirmed", style=shape.diamond, location=location.absolute, color=color.new(col16,ptransp), size = size.small, offset=(cyc16*-1))
+//plotshape(low16 ? pl16y : na, "16x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col16, ptransp), size = size.small, offset=(cyc16*-1), show_last=1, display=display.none)
+//plot(pl16y, "16x Cycle Radar Line", color=pl16p?col16:color.new(linecolor,ltransp), offset=(cyc16*-1), linewidth=2)
+plotshape(low16 ? pl16y : na, "16x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col16, ptransp), size = size.tiny, offset=(cyc16*-1), show_last=1)
+// Forecast & Labels 
+barssince_p16 = 0
+p16_x2 = ta.valuewhen(pl16, n - cyc16, 1)
+p16_y2 = ta.valuewhen(pl16, pl16, 1)
+if pl16
+    barssince_p16 := (n - cyc16) - p16_x2
+avg_barssince_p16 = ta.cum(barssince_p16) / ta.cum(math.sign(barssince_p16))
+tooltip16 = "🔄 Pivot Cycle: " + str.tostring(cyc16) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl16i + cyc16) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p16)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p16)-(pl16i + cyc16)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p16/2)) + " bars"
+var label f16 = na
+var line l16 = na
+if lab16f
+    f16 := label.new(n + math.min((math.round(avg_barssince_p16) - (pl16i+cyc16)), 500), y=pl16y, size=size.tiny, style=label.style_diamond, color=color.new(col16,ptransp),tooltip =tooltip16) 
+    label.delete(f16[1])
+    l16 := line.new(x1=n + math.min(math.round((avg_barssince_p16 - (pl16i+cyc16))-(avg_barssince_p16/2)), 500), x2=n + math.min(math.round((avg_barssince_p16 - (pl16i+cyc16))+(avg_barssince_p16/2)), 500), y1=pl16y, y2=pl16y, color=color.new(col16,ptransp))
+    line.delete(l16[1])
+var label c16 = na
+if  lab16
+    c16 := label.new(bar_index, y=pl16y, text=str.tostring(cyc16), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl16p?col16:linecolor,0), tooltip=tooltip16) 
+    label.delete(c16[1])
+
+
+
+
+
+
+// Input x32 (Default 230) Length Pivot Cycle
+col32 = color_fld7
+//col32 = input.color(color.red, "32x Cycle Color", inline="32c")
+//cyc32 = input.int(273, "Length", inline="32c")
+div7 = input.int(4, "FLD 7 Divider", inline="32c")
+cyc32=int(_auto_fld7_new/div7)
+lab32 = input.bool(true, "FLD 7 Label?", inline="32c")
+lab32f = input.bool(true, "FLD 7 Forecast?", inline="32c")
+pl32 = philo == "Highs" ? ta.pivothigh(cyc32, cyc32) : ta.pivotlow(cyc32, cyc32)
+pl32y = philo == "Highs" ? -35 : 35
+pl32i = ta.barssince(pl32)
+pl32p = pl32i>cyc32
+//low32in = philo == "Highs" ? ta.highest(close, cyc32*2) : ta.lowest(close, cyc32*2)
+low32in = philo == "Highs" ? ta.highest(high, cyc32*2) : ta.lowest(low, cyc32*2)
+low32 = ta.barssince(pl32)>cyc32 ? low32in : na
+plot(pl32y, "32x Cycle Radar Line", color=pl32p?col32:color.new(linecolor,ltransp), offset=(cyc32*-1), display=display.none)
+plotshape(pl32 ? pl32y : na, "32x Cycle Confirmed", style=shape.diamond, location=location.absolute, color=color.new(col32,ptransp), size = size.small, offset=(cyc32*-1))
+//plotshape(low32 ? pl32y : na, "16x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col32, ptransp), size = size.small, offset=(cyc32*-1), show_last=1, display=display.none)
+//plot(pl32y, "32x Cycle Radar Line", color=pl32p?col32:color.new(linecolor,ltransp), offset=(cyc32*-1),linewidth=2)
+plotshape(low32 ? pl32y : na, "16x Cycle Radar", style=shape.circle, location=location.absolute, color=color.new(col32, ptransp), size = size.tiny, offset=(cyc32*-1), show_last=1)
+// Forecast & Labels 
+barssince_p32 = 0
+p32_x2 = ta.valuewhen(pl32, n - cyc32, 1)
+p32_y2 = ta.valuewhen(pl32, pl32, 1)
+if pl32
+    barssince_p32 := (n - cyc32) - p32_x2
+avg_barssince_p32 = ta.cum(barssince_p32) / ta.cum(math.sign(barssince_p32))
+tooltip32 = "🔄 Pivot Cycle: " + str.tostring(cyc32) + " bars" +
+  "\n⏱ Last Pivot: " + str.tostring(pl32i + cyc32) + " bars ago" +
+  "\n🧮 Average Pivot: " + str.tostring(math.round(avg_barssince_p32)) + " bars" + 
+  "\n🔮 Next Pivot: " + str.tostring(math.round(avg_barssince_p32)-(pl32i + cyc32)) + " bars" +
+  "\n📏 Range: +/- " + str.tostring(math.round(avg_barssince_p32/2)) + " bars"
+var label f32 = na
+var line l32 = na
+if  lab32f
+    f32 := label.new(n + math.min((math.round(avg_barssince_p32) - (pl32i+cyc32)), 500), y=pl32y, size=size.small, style=label.style_diamond, color=color.new(col32,ptransp),tooltip =tooltip32) 
+    label.delete(f32[1])
+    l32 := line.new(x1=n + math.min(math.round((avg_barssince_p32 - (pl32i+cyc32))-(avg_barssince_p32/2)), 500), x2=n + math.min(math.round((avg_barssince_p32 - (pl32i+cyc32))+(avg_barssince_p32/2)), 500), y1=pl32y, y2=pl32y, color=color.new(col32,ptransp))
+    line.delete(l32[1])
+var label c32 = na
+if  lab32
+    c32 := label.new(bar_index, y=pl32y, text=str.tostring(cyc32), size=size.small, style=label.style_label_left, color=color.new(color.white,100), textcolor=color.new(pl32p?col32:linecolor,0), tooltip=tooltip32) 
+    label.delete(c32[1])
+

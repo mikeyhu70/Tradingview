@@ -1,0 +1,617 @@
+//@version=4
+study("MD Range Finder 2", overlay=true)
+
+mode_auto_TF = input(title="Auto Timeframe to Assess ?", defval='Manual', options=['Auto', 'Manual'])
+res = input(title="resolution (if manual)", defval="", type=input.resolution)
+period = input(title="Period", type=input.integer, defval=100, minval=0)
+delay = input(title="Delay(must be less than Period)", type=input.integer, defval=5, minval=0)
+offset = input(title="Offset(Plot how many lines shift if auto did not found an index within period parameter)", type=input.integer, defval=1, minval=0)
+strExtension = input(title="Line Extension", type=input.string, defval="None", options=["None", "Left", "Right", "Both"])
+showBaseLine0 = input(title="BaseLine(0.000)", type=input.bool, defval=true)
+showBaseLine1 = input(title="BaseLine(1.000)", type=input.bool, defval=true)
+showBaseLineMP = input(title="BaseLine(0.500)", type=input.bool, defval=true)
+strColorBaseLine = input(title="Color(BaseLine)", type=input.string, defval="Fuchsia", options=["Black", "Silver", "Gray", "White", "Maroon", "Red", "Purple", "Fuchsia", "Green", "Lime", "Olive", "Yellow", "Navy", "Teal", "Aqua", "Orange"])
+strColorBaseLineMP = input(title="Color(BaseLine MP)", type=input.string, defval="Olive", options=["Black", "Silver", "Gray", "White", "Maroon", "Red", "Purple", "Fuchsia", "Green", "Lime", "Olive", "Yellow", "Navy", "Teal", "Aqua", "Orange"])
+strStyleBaseLine = input(title="Style(BaseLine)", type=input.string, defval="Solid", options=["Solid", "Dotted", "Dashed", "Arrow(left)", "Arrow(right)", "Arrow(both)"])
+widthBaseLine = input(title="Width(BaseLine)", type=input.integer, defval=3, minval=1)
+strColorExLine = input(title="Color(ExLine)", type=input.string, defval="Tan", options=["Tan","Black", "Silver", "Gray", "White", "Maroon", "Red", "Purple", "Fuchsia", "Green", "Lime", "Olive", "Yellow", "Navy", "Teal", "Aqua", "Orange"])
+strStyleExLine = input(title="Style(ExLine)", type=input.string, defval="Dotted", options=["Solid", "Dotted", "Dashed", "Arrow(left)", "Arrow(right)", "Arrow(both)"])
+widthExLine = input(title="Width(ExLine)", type=input.integer, defval=1, minval=1)
+pbar = input(title="Paint Bar (debug)", type=input.bool, defval=false)
+
+showExLine_expext1 = input(title="expext1", type=input.bool, defval=true)
+fib_expext1 = input(title="Fib(expext1)", type=input.float, defval=1.000, minval=0)
+
+showExLine_expext382 = input(title="expext382", type=input.bool, defval=true)
+fib_expext382 = input(title="Fib(expext382)", type=input.float, defval=0.382, minval=0)
+
+showExLine_expext500 = input(title="expext500", type=input.bool, defval=true)
+fib_expext500 = input(title="Fib(expext500)", type=input.float, defval=0.500, minval=0)
+
+showExLine_expext618 = input(title="expext618", type=input.bool, defval=true)
+fib_expext618 = input(title="Fib(expext618)", type=input.float, defval=0.618, minval=0)
+
+showExLine_expext768 = input(title="expext768", type=input.bool, defval=true)
+fib_expext768 = input(title="Fib(expext768)", type=input.float, defval=0.768, minval=0)
+
+showExLine_expext2 = input(title="expext2", type=input.bool, defval=true)
+fib_expext2 = input(title="Fib(expext2)", type=input.float, defval=2.000, minval=0)
+
+showExLine_expext3 = input(title="expext3", type=input.bool, defval=true)
+fib_expext3 = input(title="Fib(expext3)", type=input.float, defval=3.000, minval=0)
+
+showExLine_expext4 = input(title="expext4", type=input.bool, defval=true)
+fib_expext4 = input(title="Fib(expext4)", type=input.float, defval=4.000, minval=0)
+
+showExLine_expext5 = input(title="expext5", type=input.bool, defval=true)
+fib_expext5 = input(title="Fib(expext5)", type=input.float, defval=5.000, minval=0)
+
+showExLine_expext6 = input(title="expext6", type=input.bool, defval=true)
+fib_expext6 = input(title="Fib(expext6)", type=input.float, defval=6.000, minval=0)
+
+showExLine_expext7 = input(title="expext7", type=input.bool, defval=true)
+fib_expext7 = input(title="Fib(expext7)", type=input.float, defval=7.000, minval=0)
+
+showExLine_expext8 = input(title="expext7", type=input.bool, defval=true)
+fib_expext8 = input(title="Fib(expext8)", type=input.float, defval=8.000, minval=0)
+
+showExLine_expext9 = input(title="expext9", type=input.bool, defval=true)
+fib_expext9 = input(title="Fib(expext9)", type=input.float, defval=9.000, minval=0)
+
+showExLine_exprej1 = input(title="exprej1", type=input.bool, defval=true)
+fib_exprej1 = input(title="Fib(exprej1)", type=input.float, defval=-0.500, minval=0)
+
+showExLine_exprej2 = input(title="exprej2", type=input.bool, defval=true)
+fib_exprej2 = input(title="Fib(exprej2)", type=input.float, defval=-1.000, minval=0)
+
+showExLine_exprej3 = input(title="exprej3", type=input.bool, defval=true)
+fib_exprej3 = input(title="Fib(exprej3)", type=input.float, defval=-3.000, minval=0)
+
+showExLine_exprej4 = input(title="exprej4", type=input.bool, defval=true)
+fib_exprej4 = input(title="Fib(exprej4)", type=input.float, defval=-4.000, minval=0)
+
+showExLine_exprej5 = input(title="exprej5", type=input.bool, defval=true)
+fib_exprej5 = input(title="Fib(exprej5)", type=input.float, defval=-5.000, minval=0)
+
+showExLine_exprej6 = input(title="exprej6", type=input.bool, defval=true)
+fib_exprej6 = input(title="Fib(exprej6)", type=input.float, defval=-6.000, minval=0)
+
+showExLine_exprej7 = input(title="exprej7", type=input.bool, defval=true)
+fib_exprej7 = input(title="Fib(exprej7)", type=input.float, defval=-7.000, minval=0)
+
+showExLine_exprej8 = input(title="exprej8", type=input.bool, defval=true)
+fib_exprej8 = input(title="Fib(exprej8)", type=input.float, defval=-8.000, minval=0)
+
+showExLine_expmidpt = input(title="expmidpt", type=input.bool, defval=false)
+
+auto_tf = timeframe.period == 'M' ? 'Y' : timeframe.period == 'W' ? 'M' : 
+   timeframe.period == 'D' ? '2D' : timeframe.period == '360' ? 'D' : 
+   timeframe.period == '240' ? 'D' : timeframe.period == '195' ? 'D' : 
+   timeframe.period == '120' ? '240' : timeframe.period == '78' ? '120' : 
+   timeframe.period == '60' ? '120' : timeframe.period == '45' ? '120' : 
+   timeframe.period == '39' ? '60' : timeframe.period == '30' ? '60' : 
+   timeframe.period == '20' ? '30' : timeframe.period == '15' ? '30' : timeframe.period == '10' ? '30' : 
+   timeframe.period == '5' ? '15' : timeframe.period == '3' ? '15' : 
+   timeframe.period == '2' ? '15' : timeframe.period == '1' ? '15' : '30'
+
+_res = mode_auto_TF == 'Auto' ? auto_tf : res
+
+hi = security(syminfo.tickerid, _res, high)
+lo = security(syminfo.tickerid, _res, low)
+cl = security(syminfo.tickerid, _res, close)
+op = security(syminfo.tickerid, _res, open)
+
+//insideBar = (high < high[1]) and (low > low[1])
+//outsideBar = (high > high[1]) and (low < low[1])
+
+insideBar = hi < hi[1] and lo > lo[1]
+outsideBar = hi > hi[1] and lo < lo[1]
+
+color_1 = insideBar ? na : outsideBar ? color.yellow : na
+
+color_2 = pbar ? color_1 : na
+
+barcolor(color_2)
+
+
+
+// func
+StrToLineExtension(strLineExtension) => strLineExtension == "None" ? extend.none : 
+   strLineExtension == "Left" ? extend.left : 
+   strLineExtension == "Right" ? extend.right : 
+   strLineExtension == "Both" ? extend.both : extend.right
+
+StrToColor(strColor) => strColor == "Black" ? color.black : 
+   strColor == "Tan" ? #D2B48C :
+   strColor == "Silver" ? color.silver : 
+   strColor == "Gray" ? color.gray : 
+   strColor == "White" ? color.white : 
+   strColor == "Maroon" ? color.maroon : 
+   strColor == "Red" ? color.red : 
+   strColor == "Purple" ? color.purple : 
+   strColor == "Fuchsia" ? color.fuchsia : 
+   strColor == "Green" ? color.green : 
+   strColor == "Lime" ? color.lime : 
+   strColor == "Olive" ? color.olive : 
+   strColor == "Yellow" ? color.yellow : 
+   strColor == "Navy" ? color.navy : 
+   strColor == "Teal" ? color.teal : 
+   strColor == "Aqua" ? color.aqua : 
+   strColor == "Orange" ? color.orange : color.black
+
+StrToLineStyle(strLineStyle) => strLineStyle == "Solid" ? line.style_solid : 
+   strLineStyle == "Dotted" ? line.style_dotted :
+   strLineStyle == "Dashed" ? line.style_dashed : 
+   strLineStyle == "Arrow(left)" ? line.style_arrow_left : 
+   strLineStyle == "Arrow(right)" ? line.style_arrow_right : 
+   strLineStyle == "Arrow(both)" ? line.style_arrow_both : line.style_solid
+
+PriceFormat() => syminfo.mintick <= 0.00001 ? "0.00000" : 
+   syminfo.mintick <= 0.0001 ? "0.0000" : 
+   syminfo.mintick <= 0.001 ? "0.000" : 
+   syminfo.mintick <= 0.01 ? "0.00" : 
+   syminfo.mintick <= 0.1 ? "0.0" : "0"
+   
+f_crossing_level_up(sr, r) =>
+    //(r > sr and r < sr[1])
+    (r < sr and r > sr[1])
+    
+f_crossing_level_down(sr, r) =>
+    //(r < sr and r > sr[1])
+    (r > sr and r < sr[1])
+
+// calc
+fractal_top = 0.0
+fractal_top := hi >= hi[1] and lo <= lo[1] ? hi[0] : fractal_top[1]
+fractal_bottom = 0.0
+fractal_bottom := hi >= hi[1] and lo <= lo[1] ? lo[0] : fractal_bottom[1]
+fractal_open= 0.0
+fractal_open := hi >= hi[1] and lo <= lo[1] ? op[0] : fractal_bottom[1]
+fractal_close = 0.0
+fractal_close := hi >= hi[1] and lo <= lo[1] ? cl[0] : fractal_bottom[1]
+
+imbal = fractal_close >= fractal_open ? fractal_top : fractal_bottom
+flip = fractal_close >= fractal_open ? 1 : -1
+
+srcHigh = fractal_top
+srcLow = fractal_bottom
+range = srcHigh - srcLow
+
+idx = offset
+done = false
+for i = delay to period
+    if ((hi[i] == srcHigh) and (lo[i] == srcLow) and (not done)) 
+        idx:= i
+        done := true
+
+
+series0 = srcLow
+series1 = srcHigh
+seriesMP = (srcHigh+srcLow)/2
+
+// plot
+ext = StrToLineExtension(strExtension)
+colorBaseLine = StrToColor(strColorBaseLine)
+colorBaseLineMP = StrToColor(strColorBaseLineMP)
+styleBaseLine = StrToLineStyle(strStyleBaseLine)
+colorExLine = StrToColor(strColorExLine)
+styleExLine = StrToLineStyle(strStyleExLine)
+
+if(showBaseLine0)
+    var line line0 = na
+    line.delete(line0)
+    line0 := line.new(x1=bar_index[idx], y1=series0, x2=bar_index, y2=series0, extend=ext, color=colorBaseLine, style=styleBaseLine, width=widthBaseLine)
+    var label label0 = na
+    label.delete(label0)
+    if f_crossing_level_up(close, series0)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level Baseline 0" + " (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series0)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level Baseline 0" + " (" + tostring(close) + ") " + timeframe.period)
+    //label0 := label.new(x=bar_index, y=series0, text="                                                                                          0.000(" + tostring(series0, PriceFormat()) + ")", style=label.style_none, textcolor=colorBaseLine, size=size.small)
+
+if(showBaseLineMP)
+    var line lineMP = na
+    line.delete(lineMP)
+    lineMP := line.new(x1=bar_index[idx], y1=seriesMP, x2=bar_index, y2=seriesMP, extend=ext, color=colorBaseLineMP, style=styleBaseLine, width=widthBaseLine)
+    var label labelMP = na
+    label.delete(labelMP)
+    if f_crossing_level_up(close, seriesMP)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level Baseline Mid Point" + " (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, seriesMP)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level Baseline Mid Point" + " (" + tostring(close) + ") " + timeframe.period)
+    //label0 := label.new(x=bar_index, y=series0, text="
+    
+if(showBaseLine1)
+    var line line1 = na
+    line.delete(line1)
+    line1 := line.new(x1=bar_index[idx], y1=series1, x2=bar_index, y2=series1, extend=ext, color=colorBaseLine, style=styleBaseLine, width=widthBaseLine)
+    var label label1 = na
+    label.delete(label1)
+    if f_crossing_level_up(close, series1)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level Baseline 1" + " (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series1)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level Baseline 1" + " (" + tostring(close) + ") " + timeframe.period)
+    //label1 := label.new(x=bar_index, y=series1, text="                                                                                          1.000(" + tostring(series1, PriceFormat()) + ")", style=label.style_none, textcolor=colorBaseLine, size=size.small)
+
+series_expext382  = imbal + flip * range * fib_expext382 
+series_expext382_color = series_expext382 < srcLow ? color.green : color.red
+
+if(showExLine_expext382)
+    var line line_expext382 = na
+    line.delete(line_expext382)
+    line_expext382:= line.new(x1=bar_index[idx], y1=series_expext382 , x2=bar_index, y2=series_expext382 , extend=ext, color=series_expext382_color, style=styleExLine, width=widthExLine)
+    var label label_expext382 = na
+    label.delete(label_expext382)
+    //if f_crossing_level_up(close, series_expext382)
+    //    alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext382) + " [" + (series_expext382 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    //else
+    //    if f_crossing_level_down(close, series_expext382)
+    //        alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext382) + " [" + (series_expext382 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext382 := label.new(x=bar_index, y=series_expext382 , text="                                                                                          " + tostring(fib_expext382, "0.000") + "(" + tostring(series_expext382 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext382_color, size=size.small)
+
+series_expext500  = imbal + flip * range * fib_expext500 
+series_expext500_color = series_expext500 < srcLow ? color.green : color.red
+
+if(showExLine_expext500)
+    var line line_expext500 = na
+    line.delete(line_expext500)
+    line_expext500:= line.new(x1=bar_index[idx], y1=series_expext500 , x2=bar_index, y2=series_expext500 , extend=ext, color=series_expext500_color, style=styleExLine, width=widthExLine)
+    var label label_expext500 = na
+    label.delete(label_expext500)
+    if f_crossing_level_up(close, series_expext500)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext500) + " [" + (series_expext500 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext500)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext500) + " [" + (series_expext500 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext500 := label.new(x=bar_index, y=series_expext500 , text="                                                                                          " + tostring(fib_expext500, "0.000") + "(" + tostring(series_expext500 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext500_color, size=size.small)
+
+
+series_expext618  = imbal + flip * range * fib_expext618 
+series_expext618_color = series_expext618 < srcLow ? color.green : color.red
+
+if(showExLine_expext618)
+    var line line_expext618 = na
+    line.delete(line_expext618)
+    line_expext618:= line.new(x1=bar_index[idx], y1=series_expext618 , x2=bar_index, y2=series_expext618 , extend=ext, color=series_expext618_color, style=styleExLine, width=widthExLine)
+    var label label_expext618 = na
+    label.delete(label_expext618)
+    if f_crossing_level_up(close, series_expext618)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext618) + " [" + (series_expext618 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext618)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext618) + " [" + (series_expext618 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext618 := label.new(x=bar_index, y=series_expext618 , text="                                                                                          " + tostring(fib_expext618, "0.000") + "(" + tostring(series_expext618 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext618_color, size=size.small)
+
+
+series_expext768  = imbal + flip * range * fib_expext768 
+series_expext768_color = series_expext768 < srcLow ? color.green : color.red
+
+if(showExLine_expext768)
+    var line line_expext768 = na
+    line.delete(line_expext768)
+    line_expext768:= line.new(x1=bar_index[idx], y1=series_expext768 , x2=bar_index, y2=series_expext768 , extend=ext, color=series_expext768_color, style=styleExLine, width=widthExLine)
+    var label label_expext768 = na
+    label.delete(label_expext768)
+    //if f_crossing_level_up(close, series_expext768)
+    //    alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext768) + " [" + (series_expext768 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    //else
+    //    if f_crossing_level_down(close, series_expext768)
+    //        alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext768) + " [" + (series_expext768 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext768 := label.new(x=bar_index, y=series_expext768 , text="                                                                                          " + tostring(fib_expext768, "0.000") + "(" + tostring(series_expext768 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext768_color, size=size.small)
+
+
+
+series_expext1  = imbal + flip * range * fib_expext1 
+
+if(showExLine_expext1)
+    var line line_expext1 = na
+    line.delete(line_expext1)
+    line_expext1:= line.new(x1=bar_index[idx], y1=series_expext1 , x2=bar_index, y2=series_expext1 , extend=ext, color=color.orange, style=styleExLine, width=3)
+    var label label_expext1 = na
+    label.delete(label_expext1)
+    label_expext1 := label.new(x=bar_index[idx], y=series_expext1 , text='\n' + tostring(fib_expext1, "0.000") + "(" + tostring(series_expext1 , PriceFormat()) + ")", style=label.style_none, textcolor=color.orange, size=size.normal)
+    if f_crossing_level_up(close, series_expext1)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext1) + " [" + "orange" + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext1)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext1) + " [" + "orange" + "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext1 := label.new(x=bar_index, y=series_expext1 , text="                                                                                          " + tostring(fib_expext1, "0.000") + "(" + tostring(series_expext1 , PriceFormat()) + ")", style=label.style_none, textcolor=color.orange, size=size.small)
+
+series_expext2  = imbal + flip * range * fib_expext2 
+series_expext2_color = series_expext2 < srcLow ? color.green : color.red
+
+if(showExLine_expext2)
+    var line line_expext2 = na
+    line.delete(line_expext2)
+    line_expext2:= line.new(x1=bar_index[idx], y1=series_expext2 , x2=bar_index, y2=series_expext2 , extend=ext, color=series_expext2_color, style=styleExLine, width=widthExLine)
+    var label label_expext2 = na
+    label.delete(label_expext2)
+    label_expext2 := label.new(x=bar_index[idx], y=series_expext2 , text='\n' + tostring(fib_expext2, "0.000") + "(" + tostring(series_expext2 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext2_color, size=size.small)
+    if f_crossing_level_up(close, series_expext2)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext2) + " [" + (series_expext2 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext2)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext2) + " [" + (series_expext2 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext2 := label.new(x=bar_index, y=series_expext2 , text="                                                                                          " + tostring(fib_expext2, "0.000") + "(" + tostring(series_expext2 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext2_color, size=size.small)
+
+ 
+series_expext3  = imbal + flip * range * fib_expext3 
+series_expext3_color = series_expext3 < srcLow ? color.green : color.red
+
+if(showExLine_expext3)
+    var line line_expext3 = na
+    line.delete(line_expext3)
+    line_expext3:= line.new(x1=bar_index[idx], y1=series_expext3 , x2=bar_index, y2=series_expext3 , extend=ext, color=series_expext3_color, style=styleExLine, width=widthExLine)
+    var label label_expext3 = na
+    label.delete(label_expext3)
+    label_expext3 := label.new(x=bar_index[idx], y=series_expext3 , text='\n' + tostring(fib_expext3, "0.000") + "(" + tostring(series_expext3 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext3_color, size=size.small)
+    if f_crossing_level_up(close, series_expext3)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext3) + " [" + (series_expext3 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext3)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext3) + " [" + (series_expext3 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext3 := label.new(x=bar_index, y=series_expext3 , text="                                                                                          " + tostring(fib_expext3, "0.000") + "(" + tostring(series_expext3 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext3_color, size=size.small)
+   
+series_expext4  = imbal + flip * range * fib_expext4 
+series_expext4_color = series_expext4 < srcLow ? color.green : color.red
+
+if(showExLine_expext4)
+    var line line_expext4 = na
+    line.delete(line_expext4)
+    line_expext4:= line.new(x1=bar_index[idx], y1=series_expext4 , x2=bar_index, y2=series_expext4 , extend=ext, color=series_expext4_color, style=styleExLine, width=widthExLine)
+    var label label_expext4 = na
+    label.delete(label_expext4)
+    label_expext4 := label.new(x=bar_index[idx], y=series_expext4 , text='\n' + tostring(fib_expext4, "0.000") + "(" + tostring(series_expext4 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext4_color, size=size.small)
+    if f_crossing_level_up(close, series_expext4)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext4) + " [" + (series_expext4 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext4)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext4) + " [" + (series_expext4 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext4 := label.new(x=bar_index, y=series_expext4 , text="                                                                                          " + tostring(fib_expext4, "0.000") + "(" + tostring(series_expext4 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext4_color, size=size.small)
+ 
+series_expext5  = imbal + flip * range * fib_expext5 
+series_expext5_color = series_expext5 < srcLow ? color.green : color.red
+
+if(showExLine_expext5)
+    var line line_expext5 = na
+    line.delete(line_expext5)
+    line_expext5:= line.new(x1=bar_index[idx], y1=series_expext5 , x2=bar_index, y2=series_expext5 , extend=ext, color=series_expext5_color, style=styleExLine, width=widthExLine)
+    var label label_expext5 = na
+    label.delete(label_expext5)
+    label_expext5 := label.new(x=bar_index[idx], y=series_expext5 , text='\n' + tostring(fib_expext5, "0.000") + "(" + tostring(series_expext5 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext5_color, size=size.small)
+    if f_crossing_level_up(close, series_expext5)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext5) + " [" + (series_expext5 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext5)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext5) + " [" + (series_expext5 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext5 := label.new(x=bar_index, y=series_expext5 , text="                                                                                          " + tostring(fib_expext5, "0.000") + "(" + tostring(series_expext5 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext5_color, size=size.small)
+
+
+series_expext6  = imbal + flip * range * fib_expext6 
+series_expext6_color = series_expext6 < srcLow ? color.green : color.red
+
+if(showExLine_expext6)
+    var line line_expext6 = na
+    line.delete(line_expext6)
+    line_expext6:= line.new(x1=bar_index[idx], y1=series_expext6 , x2=bar_index, y2=series_expext6 , extend=ext, color=series_expext6_color, style=styleExLine, width=widthExLine)
+    var label label_expext6 = na
+    label.delete(label_expext6)
+    label_expext6 := label.new(x=bar_index[idx], y=series_expext6 , text= '\n' + tostring(fib_expext6, "0.000") + "(" + tostring(series_expext6 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext6_color, size=size.small)
+    if f_crossing_level_up(close, series_expext6)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext6) + " [" + (series_expext6 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext6)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext6) + " [" + (series_expext6 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext6 := label.new(x=bar_index, y=series_expext6 , text="                                                                                          " + tostring(fib_expext6, "0.000") + "(" + tostring(series_expext6 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext6_color, size=size.small)
+
+
+series_expext7  = imbal + flip * range * fib_expext7 
+series_expext7_color = series_expext7 < srcLow ? color.green : color.red
+
+if(showExLine_expext7)
+    var line line_expext7 = na
+    line.delete(line_expext7)
+    line_expext7:= line.new(x1=bar_index[idx], y1=series_expext7 , x2=bar_index, y2=series_expext7 , extend=ext, color=series_expext7_color, style=styleExLine, width=widthExLine)
+    var label label_expext7 = na
+    label.delete(label_expext7)
+    label_expext7 := label.new(x=bar_index[idx], y=series_expext7 , text= '\n' + tostring(fib_expext7, "0.000") + "(" + tostring(series_expext7 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext7_color, size=size.small)
+    if f_crossing_level_up(close, series_expext7)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext7) + " [" + (series_expext7 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext7)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext7) + " [" + (series_expext7 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext7 := label.new(x=bar_index, y=series_expext7 , text="                                                                                          " + tostring(fib_expext7, "0.000") + "(" + tostring(series_expext7 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext7_color, size=size.small)
+
+
+series_expext8  = imbal + flip * range * fib_expext8 
+series_expext8_color = series_expext8 < srcLow ? color.green : color.red
+
+if(showExLine_expext8)
+    var line line_expext8 = na
+    line.delete(line_expext8)
+    line_expext8:= line.new(x1=bar_index[idx], y1=series_expext8 , x2=bar_index, y2=series_expext8 , extend=ext, color=series_expext8_color, style=styleExLine, width=widthExLine)
+    var label label_expext8 = na
+    label.delete(label_expext8)
+    label_expext8 := label.new(x=bar_index[idx], y=series_expext8 , text='\n' + tostring(fib_expext8, "0.000") + "(" + tostring(series_expext8 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext8_color, size=size.small)
+    if f_crossing_level_up(close, series_expext8)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext8) + " [" + (series_expext8 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext8)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext8) + " [" + (series_expext8 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext8 := label.new(x=bar_index, y=series_expext8 , text="                                                                                          " + tostring(fib_expext8, "0.000") + "(" + tostring(series_expext8 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext8_color, size=size.small)
+
+
+series_expext9  = imbal + flip * range * fib_expext9 
+series_expext9_color = series_expext9 < srcLow ? color.green : color.red
+
+if(showExLine_expext9)
+    var line line_expext9 = na
+    line.delete(line_expext9)
+    line_expext9:= line.new(x1=bar_index[idx], y1=series_expext9 , x2=bar_index, y2=series_expext9 , extend=ext, color=series_expext9_color, style=styleExLine, width=widthExLine)
+    var label label_expext9 = na
+    label.delete(label_expext9)
+    label_expext9 := label.new(x=bar_index[idx], y=series_expext9 , text='\n' + tostring(fib_expext9, "0.000") + "(" + tostring(series_expext9 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext9_color, size=size.small)
+    if f_crossing_level_up(close, series_expext9)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP level " + tostring(fib_expext9) + " [" + (series_expext9 < srcLow ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_expext9)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN level " + tostring(fib_expext9) + " [" + (series_expext9 < srcLow ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_expext9 := label.new(x=bar_index, y=series_expext9 , text="                                                                                          " + tostring(fib_expext9, "0.000") + "(" + tostring(series_expext9 , PriceFormat()) + ")", style=label.style_none, textcolor=series_expext9_color, size=size.small)
+
+
+series_exprej1  = imbal - (flip * range) + flip * range * fib_exprej1 
+series_exprej1_color = series_exprej1 < srcHigh ? color.green : color.red
+
+if(showExLine_exprej1)
+    var line line_exprej1 = na
+    line.delete(line_exprej1)
+    line_exprej1:= line.new(x1=bar_index[idx], y1=series_exprej1 , x2=bar_index, y2=series_exprej1 , extend=ext, color=series_exprej1_color, style=styleExLine, width=widthExLine)
+    var label label_exprej1 = na
+    label.delete(label_exprej1)
+    if f_crossing_level_up(close, series_exprej1)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej1) + " [" + (series_exprej1 < srcHigh ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej1)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej1) + " [" + (series_exprej1 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_exprej1 := label.new(x=bar_index[idx], y=series_exprej1 , text='\n' + tostring(fib_exprej1, "0.000") + "(" + tostring(series_exprej1 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej1_color, size=size.small)
+    //label_exprej1 := label.new(x=bar_index, y=series_exprej1 , text="                                                                                          " + tostring(fib_exprej1, "0.000") + "(" + tostring(series_exprej1 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej1_color, size=size.small)
+
+series_exprej2  = imbal - (flip * range) + flip * range * fib_exprej2 
+series_exprej2_color = series_exprej2 < srcHigh ? color.aqua : color.fuchsia
+
+if(showExLine_exprej2)
+    var line line_exprej2 = na
+    line.delete(line_exprej2)
+    line_exprej2:= line.new(x1=bar_index[idx], y1=series_exprej2 , x2=bar_index, y2=series_exprej2 , extend=ext, color=series_exprej2_color , style=styleExLine, width=3)
+    var label label_exprej2 = na
+    label.delete(label_exprej2)
+    label_exprej2 := label.new(x=bar_index[idx], y=series_exprej2 , text='\n' + tostring(fib_exprej2, "0.000") + "(" + tostring(series_exprej2 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej2_color, size=size.normal)
+    if f_crossing_level_up(close, series_exprej2)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej2) + " [" + (series_exprej2 < srcHigh ? "aqua" : "fuchsia") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej2)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej2) + " [" + (series_exprej2 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_exprej2 := label.new(x=bar_index, y=series_exprej2 , text="                                                                                          " + tostring(fib_exprej2, "0.000") + "(" + tostring(series_exprej2 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej2_color, size=size.small)
+
+
+series_exprej3  = imbal - (flip * range) + flip * range * fib_exprej3 
+series_exprej3_color = series_exprej3 < srcHigh ? color.green : color.red
+
+if(showExLine_exprej3)
+    var line line_exprej3 = na
+    line.delete(line_exprej3)
+    line_exprej3:= line.new(x1=bar_index[idx], y1=series_exprej3 , x2=bar_index, y2=series_exprej3 , extend=ext, color=series_exprej3_color , style=styleExLine, width=widthExLine)
+    var label label_exprej3 = na
+    label.delete(label_exprej3)
+    label_exprej3 := label.new(x=bar_index[idx], y=series_exprej3 , text= '\n' + tostring(fib_exprej3, "0.000") + "(" + tostring(series_exprej3 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej3_color, size=size.small)
+    if f_crossing_level_up(close, series_exprej3)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej3) + " [" + (series_exprej3 < srcHigh ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej3)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej3) + " [" + (series_exprej3 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_exprej3 := label.new(x=bar_index, y=series_exprej3 , text="                                                                                          " + tostring(fib_exprej3, "0.000") + "(" + tostring(series_exprej3 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej3_color, size=size.small)
+
+series_exprej4  = imbal - (flip * range) + flip * range * fib_exprej4 
+series_exprej4_color = series_exprej4 < srcHigh ? color.green : color.red
+
+if(showExLine_exprej4)
+    var line line_exprej4 = na
+    line.delete(line_exprej4)
+    line_exprej4:= line.new(x1=bar_index[idx], y1=series_exprej4 , x2=bar_index, y2=series_exprej4 , extend=ext, color=series_exprej4_color , style=styleExLine, width=widthExLine)
+    var label label_exprej4 = na
+    label.delete(label_exprej4)
+    label_exprej4 := label.new(x=bar_index[idx], y=series_exprej4 , text='\n' + tostring(fib_exprej4, "0.000") + "(" + tostring(series_exprej4 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej4_color, size=size.small)
+    if f_crossing_level_up(close, series_exprej4)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej4) + " [" + (series_exprej4 < srcHigh ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej4)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej4) + " [" + (series_exprej4 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_exprej4 := label.new(x=bar_index, y=series_exprej4 , text="                                                                                          " + tostring(fib_exprej4, "0.000") + "(" + tostring(series_exprej4 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej4_color, size=size.small)
+
+
+series_exprej5  = imbal - (flip * range) + flip * range * fib_exprej5 
+series_exprej5_color = series_exprej5 < srcHigh ? color.green : color.red
+
+if(showExLine_exprej5)
+    var line line_exprej5 = na
+    line.delete(line_exprej5)
+    line_exprej5:= line.new(x1=bar_index[idx], y1=series_exprej5 , x2=bar_index, y2=series_exprej5 , extend=ext, color=series_exprej5_color , style=styleExLine, width=widthExLine)
+    var label label_exprej5 = na
+    label.delete(label_exprej5)
+    label_exprej5 := label.new(x=bar_index[idx], y=series_exprej5 , text='\n' + tostring(fib_exprej5, "0.000") + "(" + tostring(series_exprej5 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej5_color, size=size.small)
+    if f_crossing_level_up(close, series_exprej5)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej5) + " [" + (series_exprej5 < srcHigh ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej5)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej5) + " [" + (series_exprej5 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_exprej5 := label.new(x=bar_index, y=series_exprej5 , text="                                                                                          " + tostring(fib_exprej5, "0.000") + "(" + tostring(series_exprej5 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej5_color, size=size.small)
+
+
+series_exprej6  = imbal - (flip * range) + flip * range * fib_exprej6 
+series_exprej6_color = series_exprej6 < srcHigh ? color.green : color.red
+
+if(showExLine_exprej6)
+    var line line_exprej6 = na
+    line.delete(line_exprej6)
+    line_exprej6:= line.new(x1=bar_index[idx], y1=series_exprej6 , x2=bar_index, y2=series_exprej6 , extend=ext, color=series_exprej6_color , style=styleExLine, width=widthExLine)
+    var label label_exprej6 = na
+    label.delete(label_exprej6)
+    label_exprej6 := label.new(x=bar_index[idx], y=series_exprej6 , text='\n' + tostring(fib_exprej6, "0.000") + "(" + tostring(series_exprej6 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej6_color, size=size.small)
+    if f_crossing_level_up(close, series_exprej6)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej6) + " [" + (series_exprej6 < srcHigh ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej6)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej6) + " [" + (series_exprej6 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+    //label_exprej6 := label.new(x=bar_index, y=series_exprej6 , text="                                                                                          " + tostring(fib_exprej6, "0.000") + "(" + tostring(series_exprej6 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej6_color, size=size.small)
+
+
+series_exprej7  = imbal - (flip * range) + flip * range * fib_exprej7 
+series_exprej7_color = series_exprej7 < srcHigh ? color.green : color.red
+
+if(showExLine_exprej7)
+    var line line_exprej7 = na
+    line.delete(line_exprej7)
+    line_exprej7:= line.new(x1=bar_index[idx], y1=series_exprej7 , x2=bar_index, y2=series_exprej7 , extend=ext, color=series_exprej7_color , style=styleExLine, width=widthExLine)
+    var label label_exprej7 = na
+    label.delete(label_exprej7)
+    label_exprej7 := label.new(x=bar_index[idx], y=series_exprej7 , text='\n' + tostring(fib_exprej7, "0.000") + "(" + tostring(series_exprej7 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej7_color, size=size.small)
+    if f_crossing_level_up(close, series_exprej7)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej7) + " [" + (series_exprej7 < srcHigh ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej7)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej7) + " [" + (series_exprej7 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+                          
+    
+series_exprej8  = imbal - (flip * range) + flip * range * fib_exprej8 
+series_exprej8_color = series_exprej8 < srcHigh ? color.green : color.red
+
+if(showExLine_exprej8)
+    var line line_exprej8 = na
+    line.delete(line_exprej8)
+    line_exprej8:= line.new(x1=bar_index[idx], y1=series_exprej8 , x2=bar_index, y2=series_exprej8 , extend=ext, color=series_exprej8_color , style=styleExLine, width=widthExLine)
+    var label label_exprej8 = na
+    label.delete(label_exprej8)
+    label_exprej8 := label.new(x=bar_index[idx], y=series_exprej8 , text='\n' + tostring(fib_exprej8, "0.000") + "(" + tostring(series_exprej8 , PriceFormat()) + ")", style=label.style_none, textcolor=series_exprej8_color, size=size.small)
+    if f_crossing_level_up(close, series_exprej8)
+        alert("MD Range Finder 2: " + syminfo.ticker + " crossing UP REJ level " + tostring(fib_exprej8) + " [" + (series_exprej8 < srcHigh ? "green" : "red") + "] (" + tostring(close) + ") " + timeframe.period)
+    else
+        if f_crossing_level_down(close, series_exprej8)
+            alert("MD Range Finder 2: " + syminfo.ticker + " crossing DOWN REJ level " + tostring(fib_exprej8) + " [" + (series_exprej8 < srcHigh ? "green" : "red") +  "] (" + tostring(close) + ") " + timeframe.period)
+                         
+
+
+series_expmidpt  = (srcLow + srcHigh) / 2
+
+if(showExLine_expmidpt)
+    var line line_expmidpt = na
+    line.delete(line_expmidpt)
+    line_expmidpt:= line.new(x1=bar_index[idx], y1=series_expmidpt , x2=bar_index, y2=series_expmidpt , extend=ext, color=color.gray, style=line.style_dashed, width=widthExLine)
+    var label label_expmidpt = na
+    label.delete(label_expmidpt)
+    //label_expmidpt := label.new(x=bar_index, y=series_expmidpt , text="                                                                                          " +  "mid (" + tostring(series_expmidpt , PriceFormat()) + ")", style=label.style_none, textcolor=colorExLine, size=size.small)
+
+    
+    

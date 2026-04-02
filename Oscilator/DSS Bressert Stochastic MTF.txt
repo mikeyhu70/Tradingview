@@ -1,0 +1,219 @@
+//@version=5
+indicator(title="DSS Bressert Stochastic MTF", shorttitle="Bressert_MTF", format=format.price, precision=2, timeframe="", timeframe_gaps=true)
+
+GP0 = "===== Bressert Settings for 1st line pair ====="
+periodK = input.int(9, title="%K Length", minval=1, group = GP0)
+smoothK = input.int(4, title="%K Smoothing", minval=1, group = GP0)
+periodD = input.int(4, title="%D Smoothing", minval=1, group = GP0)
+kInput = input.string("DEMA", title="MA for k", options=["SMA", "ZLEMA", "DEMA", "ZLDEMA", "ZLTEMA", "DZLEMA", "TZLEMA","EMA", "SMMA (RMA)", "WMA", "VWMA", "LLSMA", "LLEMA", "LLHMA", "LLRMA", "LLWMA"])
+dInput = input.string("EMA", title="MA for d", options=["SMA", "ZLEMA", "DEMA", "ZLDEMA", "ZLTEMA", "DZLEMA", "TZLEMA","EMA", "SMMA (RMA)", "WMA", "VWMA", "LLSMA", "LLEMA", "LLHMA", "LLRMA", "LLWMA"])
+bullcolor = input.color(defval=color.green, title="Positive Delta")
+bearcolor = input.color(defval=color.fuchsia, title="Negative Delta")
+transp1  = input.int(defval=0,          title="Transparency #1", minval=0, maxval=100)
+transp2  = input.int(defval=60,          title="Transparency #2 (waning momentum)", minval=0, maxval=100)
+maInput = input.string("DEMA", title="MA for diff", options=["SMA", "ZLEMA", "DEMA", "ZLDEMA", "ZLTEMA", "DZLEMA", "TZLEMA","EMA", "SMMA (RMA)", "WMA", "VWMA", "LLSMA", "LLEMA", "LLHMA", "LLRMA", "LLWMA"])
+periodma = input.int(4, title="MA Period", minval=1)
+
+
+// -- Custom MA 
+
+nma(src, length1, length2) =>
+    lambda = length1 / length2
+    alpha = lambda * (length1 - 1) / (length1 - lambda)
+    ma1 = ta.ema(src, length1)
+    ma2 = ta.ema(ma1, length2)
+    nma = (1 + alpha) * ma1 - alpha * ma2
+    nma
+
+dema(src, len) =>
+    ma1 = ta.ema(src, len)
+    ma2 = ta.ema(ma1, len)
+    2 * ma1 - ma2
+
+eTma(_src, _len) =>
+    _tma = ta.ema(ta.ema(_src, _len), _len)
+    _tma
+
+tma(_src, _len) =>
+    _tma = ta.sma(ta.sma(_src, _len), _len)
+    _tma
+
+noma(_src, _len) =>
+    _noma = _src
+    _noma
+
+tema(src, len) =>
+    ma1 = ta.ema(src, len)
+    ma2 = ta.ema(ma1, len)
+    ma3 = ta.ema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tdema(src, len) =>
+    ma1 = dema(src, len)
+    ma2 = dema(ma1, len)
+    ma3 = dema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+ttema(src, len) =>
+    ma1 = tema(src, len)
+    ma2 = tema(ma1, len)
+    ma3 = tema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tnma(src, len) =>
+    ma1 = nma(src, len, 3)
+    ma2 = nma(ma1, len, 3)
+    ma3 = nma(ma2, len, 3)
+    //4 * (ma1 - ma3) + ma3
+    3 * (ma1 - ma3) + ma3
+
+thma(src, len) =>
+    ma1 = ta.hma(src, len)
+    ma2 = ta.hma(ma1, len)
+    ma3 = ta.hma(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+zlema(src, len) =>
+    lag = math.round((len - 1) / 2)
+    zlsrc = src + src - src[lag]
+    ta.ema(zlsrc, len)
+
+zldema(src, len) =>
+    lag = math.round((len - 1) / 2)
+    zlsrc = src + src - src[lag]
+    dema(zlsrc, len)
+
+zltema(src, len) =>
+    lag = math.round((len - 1) / 2)
+    zlsrc = src + src - src[lag]
+    tema(zlsrc, len)
+
+dzlema(src, len) =>
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    2 * ma1 - ma2
+
+tzlema(src, len) =>
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+//qzlema(src, len) => 
+//    ma1 = zlema(src, len)
+//    ma2 = zlema(ma1, len)
+//    ma3 = zlema(ma2, len)
+//    ma4 = zlema(ma3, len)
+//    3 * (ma2 - ma3) + ma4
+
+qzlema(src, len) =>
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    ma4 = zlema(ma3, len)
+    2 * (ma1 - ma2) + 2 * (ma2 - ma3) + ma4
+
+llema(src, len) =>
+    srcnew = 0.25 * src + 0.5 * src[1] + 0.25 * src[2]
+    ta.ema(srcnew, len)
+
+llsma(src, len) =>
+    srcnew = 0.25 * src + 0.5 * src[1] + 0.25 * src[2]
+    ta.sma(srcnew, len)
+
+llhma(src, len) =>
+    srcnew = 0.25 * src + 0.5 * src[1] + 0.25 * src[2]
+    ta.hma(srcnew, len)
+
+llwma(src, len) =>
+    srcnew = 0.25 * src + 0.5 * src[1] + 0.25 * src[2]
+    ta.wma(srcnew, len)
+
+llrma(src, len) =>
+    srcnew = 0.25 * src + 0.5 * src[1] + 0.25 * src[2]
+    ta.rma(srcnew, len)
+
+lltema(src, len) =>
+    srcnew = 0.25 * src + 0.5 * src[1] + 0.25 * src[2]
+    tema(srcnew, len)
+
+f_hma(_src, _length) =>
+    //HMA = WMA(2*WMA(n/2) − WMA(n)),sqrt(n))
+    _return = ta.wma(2 * ta.wma(_src, _length / 2) - ta.wma(_src, _length), math.round(math.sqrt(_length)))
+    _return
+
+lsma(_src, _len, _off) =>
+    a = ta.correlation(_src, bar_index, _len) * (ta.stdev(_src, _len) / ta.stdev(bar_index, _len))
+    b = ta.sma(_src, _len) - a * ta.sma(bar_index, _len)
+    c = a * (bar_index - _off) + b
+    c
+
+ma(source, length, type) =>
+    switch type
+        "SMA" => ta.sma(source, length)
+        "ZLEMA" => zlema(source, length)
+        "DEMA" => dema(source, length)
+        "ZLDEMA" => zldema(source, length)
+        "ZLTEMA" => zltema(source, length)
+        "DZLEMA" => dzlema(source, length)
+        "TZLEMA" => tzlema(source, length)
+        "EMA" => ta.ema(source, length)
+        "SMMA (RMA)" => ta.rma(source, length)
+        "WMA" => ta.wma(source, length)
+        "LLSMA" => llsma(source, length)
+        "LLEMA" => llema(source, length) 
+        "LLHMA" => llhma(source, length) 
+        "LLRMA" => llrma(source, length) 
+        "LLWMA" => llwma(source, length) 
+        
+
+k = ma(ta.stoch(close, high, low, periodK), smoothK,kInput)
+d = ma(k, periodD,dInput)
+
+DSS_k = ma(ta.stoch(k, k, k, periodK), smoothK,kInput)
+DSS_d = ma(DSS_k, periodD,dInput)
+
+b1 = (close - open)
+b2 = (close - open)
+diff = (DSS_k - DSS_d)
+diff_eff_up = math.abs(b1 /diff)
+diff_eff_dn = -math.abs(b2 /diff)
+
+madiff = ma(diff, periodma,maInput)
+plot (madiff, linewidth=1, color=color.rgb(105, 109, 110),display=display.all)
+
+//_color = (diff >= 0 and b1 < 0) ?  color.new(bullcolor,transp2) : (diff >= 0 and diff_eff_up < diff_eff_up[1]) ?  color.new(bullcolor,transp2) : (diff >= 0 and diff_eff_up >= diff_eff_up[1]) ? color.new(bullcolor,transp1) : (diff < 0 and b2 >= 0) ? color.new(bearcolor,transp2) : (diff < 0 and diff_eff_dn <= diff_eff_dn[1]) ? color.new(bearcolor,transp1) : color.new(bearcolor,transp2) 
+
+_color = (diff >= 0 and diff < madiff) ?  color.new(bullcolor,transp2)  : (diff > 0 and diff >= madiff) ? color.new(bullcolor,transp1) : (diff < 0 and diff < madiff) ? color.new(bearcolor,transp1) :  color.new(bearcolor,transp2)
+
+
+plot (diff, color=_color, style=plot.style_columns, linewidth=2)
+
+
+// Calculation for 2nd Line Pair
+GP1 = "===== Bressert Settings for 2nd line pair ====="
+line_pair_2 = input.bool(title='Activate 2nd Line Pair?', defval=true, group=GP1)
+periodK_2 = input.int(14, title="%K Length", minval=1, group = GP1)
+smoothK_2 = input.int(8, title="%K Smoothing", minval=1, group = GP1)
+periodD_2 = input.int(4, title="%D Smoothing", minval=1, group = GP1)
+
+
+k_2 = ma(ta.stoch(close, high, low, periodK_2), smoothK_2,kInput)
+d_2 = ma(k_2, periodD_2,dInput)
+
+DSS_k_2 = ma(ta.stoch(k_2, k_2, k_2, periodK_2), smoothK_2,kInput)
+DSS_d_2 = ma(DSS_k_2, periodD_2,dInput)
+
+
+// Plots
+
+plot(DSS_k, title="%K", color=color.new(#3029ff,40),linewidth=2, display=display.all, style=plot.style_steplinebr)
+plot(DSS_d, title="%D", color=color.new(#FF6D00,10), linewidth=1, display=display.all, style=plot.style_steplinebr)
+
+plot(line_pair_2 == true ? DSS_k_2 : na, title="%K 2nd", color=#05c3cd,linewidth=3)
+plot(line_pair_2 == true ? DSS_d_2 : na, title="%D 2nd", color=#ee00ff, linewidth=3)
+
+h0 = hline(80, "Upper Band", color=#787B86)
+hline(50, "Middle Band", color=color.new(#787B86, 50))
+h1 = hline(20, "Lower Band", color=#787B86)
+fill(h0, h1, color=color.rgb(33, 150, 243, 90), title="Background")

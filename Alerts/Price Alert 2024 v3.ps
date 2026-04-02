@@ -1,0 +1,268 @@
+//@version=5
+indicator('Price Alert 2024-V3', shorttitle='Price-Alert-2024-V3', overlay=true)
+
+
+// Inputs
+
+// Show/Hide, Colors
+show_levels = input(false, title='Show Alert Levels')
+change_color = input(true, title='Change Level Color Based on Position Above/Below Price')
+dim_triggered = input(true, title='Dim Already Triggered Levels (Keep Alerts Active)')
+hide_triggered = input(true, title='Hide Already Triggered Levels (Disable Alerts)')
+use_confirmed_close = input(false, title='Trigger Alerts Only After a Confirmed Close')
+swap_colors = input(false, title='Swap Colors')
+_level = input(true, title='Use last close (true) or current open (false) to calculate level from %')
+
+// Alert Levels
+alert_style = input.string('price line', title='Alert Style', options=['plot', 'price line'])
+src_str = input.string('close', title='Source', options=['high/low', 'open/close', 'close', 'hl2', 'hlc3', 'ohlc4'])
+_level1 = input.float(12.5, title='Level 1 % (0 - Disabled)')
+_level2 = input.float(10, title='Level 2 %')
+_level3 = input.float(7.5, title='Level 3 %')
+_level4 = input.float(5.0, title='Level 4 %')
+_level5 = input.float(2.5, title='Level 5 %')
+_level6 = input.float(-2.5, title='Level 6 %')
+_level7 = input.float(-5.0, title='Level 7 %')
+_level8 = input.float(-7.5, title='Level 8 %')
+_level9 = input.float(-10.0, title='Level 9 %')
+_level10 = input.float(-12.5, title='Level 10 %')
+
+level1 = 0.0
+level2 = 0.0
+level3 = 0.0
+level4 = 0.0
+level5 = 0.0
+level6 = 0.0
+level7 = 0.0
+level8 = 0.0
+level9 = 0.0
+level10 = 0.0
+
+if _level 
+    level1 := close[1] * (1+_level1/100)
+    level2 := close[1] * (1+_level2/100)
+    level3 := close[1] * (1+_level3/100)
+    level4 := close[1] * (1+_level4/100)
+    level5 := close[1] * (1+_level5/100)
+    level6 := close[1] * (1+_level6/100)
+    level7 := close[1] * (1+_level7/100)
+    level8 := close[1] * (1+_level8/100)
+    level9 := close[1] * (1+_level9/100)
+    level10 := close[1] * (1+_level10/100)
+else
+    level1 := open * (1+_level1/100)
+    level2 := open * (1+_level2/100)
+    level3 := open * (1+_level3/100)
+    level4 := open * (1+_level4/100)
+    level5 := open * (1+_level5/100)
+    level6 := open * (1+_level6/100)
+    level7 := open * (1+_level7/100)
+    level8 := open * (1+_level8/100)
+    level9 := open * (1+_level9/100)
+    level10 := open * (1+_level10/100)
+
+
+// Colors
+
+d = 0
+l_color = color.blue
+r_color = color.red
+s_color = color.green
+t_color = color.gray
+
+if swap_colors
+    old_color = r_color
+    r_color := s_color
+    s_color := old_color
+    s_color
+
+// Source
+
+// extract source from input string
+get_source(str, mode) =>
+    res = str == 'open' ? open : str == 'close' ? close : str == 'high' ? high : str == 'low' ? low : str == 'hl2' ? hl2 : str == 'hlc3' ? hlc3 : str == 'ohlc4' ? ohlc4 : str == 'tr' ? ta.tr : na
+    res := na(res) and mode == 'high' ? str == 'open/close' ? math.max(open, close) : str == 'high/low' ? high : res : res
+    res := na(res) and mode == 'low' ? str == 'open/close' ? math.min(open, close) : str == 'high/low' ? low : res : res
+    res
+
+// Alert Level Triggers
+
+// get highest/lowest sources for level penetration
+change_color_level = close
+src = get_source(src_str, '')
+high_src = get_source(src_str, 'high')
+low_src = get_source(src_str, 'low')
+
+f_crossing_level_up(sr, r) =>
+    //(r > sr and r < sr[1])
+    (r < sr and r > sr[1])
+    
+f_crossing_level_down(sr, r) =>
+    //(r < sr and r > sr[1])
+    (r > sr and r < sr[1])
+
+// uses src, high_src, low_src must remain after var declaration
+get_trigger(str, level, offset) =>
+    is_hl_src = str == 'high/low' or str == 'open/close'
+    // directional level penetration
+    //hl_trigger = is_hl_src and (ta.crossover(high_src[offset], level) or ta.crossunder(low_src[offset], level))
+    hl_trigger = is_hl_src and (f_crossing_level_up(high_src[offset], level) or f_crossing_level_down(low_src[offset], level))
+    //c_trigger = not is_hl_src and ta.cross(src[offset], level)
+    c_trigger = not is_hl_src and (f_crossing_level_up(src[offset], level) or f_crossing_level_down(src[offset], level))
+    res = (hl_trigger or c_trigger) and level > 0
+    res
+
+// Alert Triggers
+
+
+
+// for confirmed close we completely ignore the current bar and process the prev already closed bar instead
+// 1 bar lag for confirmed close: trigger the alert only on the next bar (after close), disable triggered alert starting from the next+1 bar
+offset = use_confirmed_close ? 1 : 0
+trigger1 = get_trigger(src_str, level1, offset)
+trigger2 = get_trigger(src_str, level2, offset)
+trigger3 = get_trigger(src_str, level3, offset)
+trigger4 = get_trigger(src_str, level4, offset)
+trigger5 = get_trigger(src_str, level5, offset)
+trigger6 = get_trigger(src_str, level6, offset)
+trigger7 = get_trigger(src_str, level7, offset)
+trigger8 = get_trigger(src_str, level8, offset)
+trigger9 = get_trigger(src_str, level9, offset)
+trigger10 = get_trigger(src_str, level10,offset)
+
+// Triggered Once Check
+
+// barstate
+is_hist = barstate.ishistory
+is_rt = barstate.isrealtime
+
+// trigger alerts only on realtime bars
+triggered1 = not na(ta.barssince(trigger1 and is_rt))
+triggered2 = not na(ta.barssince(trigger2 and is_rt))
+triggered3 = not na(ta.barssince(trigger3 and is_rt))
+triggered4 = not na(ta.barssince(trigger4 and is_rt))
+triggered5 = not na(ta.barssince(trigger5 and is_rt))
+triggered6 = not na(ta.barssince(trigger6 and is_rt))
+triggered7 = not na(ta.barssince(trigger7 and is_rt))
+triggered8 = not na(ta.barssince(trigger8 and is_rt))
+triggered9 = not na(ta.barssince(trigger9 and is_rt))
+triggered10 = not na(ta.barssince(trigger10 and is_rt))
+
+// disable already triggered alerts
+// 1 bar lag : trigger the alert dialog on the current bar first, disable triggered alert only starting from the next bar
+enabled1 = hide_triggered and triggered1[1] ? false : true
+enabled2 = hide_triggered and triggered2[1] ? false : true
+enabled3 = hide_triggered and triggered3[1] ? false : true
+enabled4 = hide_triggered and triggered4[1] ? false : true
+enabled5 = hide_triggered and triggered5[1] ? false : true
+enabled6 = hide_triggered and triggered6[1] ? false : true
+enabled7 = hide_triggered and triggered7[1] ? false : true
+enabled8 = hide_triggered and triggered8[1] ? false : true
+enabled9 = hide_triggered and triggered9[1] ? false : true
+enabled10 = hide_triggered and triggered10[1] ? false : true
+
+
+// Alert
+
+priceChange = (close - open) / open * 100
+
+alertMessage(level) =>
+    direction = priceChange >= 0 ? "up" : "down"
+    syminfo.ticker + " has moved " + direction + " by " + str.tostring(math.abs(level)) + "% on the current bar. Last price: " + str.tostring(close)
+
+
+//alert_cond = trigger1 and enabled1 or trigger2 and enabled2 or trigger3 and enabled3 or trigger4 and enabled4 or trigger5 and enabled5 or trigger6 and enabled6 or trigger7 and enabled7 or trigger8 and enabled8 or trigger9 and enabled9  or (trigger10 and enabled10)
+
+// you can have multiple alertconditions for each level but free accounts are limited to 1 alert slot only, so we must use 1 alertcondition for all alert levels
+//alertcondition(alert_cond, title='Multi Alerts Level Cross', message='Crossing Level')
+
+if trigger1 and enabled1
+    alert(alertMessage(_level1))
+if trigger2 and enabled2
+    alert(alertMessage(_level2))
+if trigger3 and enabled3
+    alert(alertMessage(_level3))
+if trigger4 and enabled4
+    alert(alertMessage(_level4))
+if trigger5 and enabled5
+    alert(alertMessage(_level5))
+if trigger6 and enabled6
+    alert(alertMessage(_level6))
+if trigger7 and enabled7
+    alert(alertMessage(_level7))
+if trigger8 and enabled8
+    alert(alertMessage(_level8))
+if trigger9 and enabled9
+    alert(alertMessage(_level9))
+if trigger10 and enabled10
+    alert(alertMessage(_level10))
+
+
+// Levels
+
+// disable triggered alerts on the current bar
+show_level1 = hide_triggered and triggered1 ? false : true
+show_level2 = hide_triggered and triggered2 ? false : true
+show_level3 = hide_triggered and triggered3 ? false : true
+show_level4 = hide_triggered and triggered4 ? false : true
+show_level5 = hide_triggered and triggered5 ? false : true
+show_level6 = hide_triggered and triggered6 ? false : true
+show_level7 = hide_triggered and triggered7 ? false : true
+show_level8 = hide_triggered and triggered8 ? false : true
+show_level9 = hide_triggered and triggered9 ? false : true
+show_level10 = hide_triggered and triggered10 ? false : true
+
+// uses change_color_level must remain after
+// 2, 3 or 4 colors doesn't affect the number of plot outputs, UI responsiveness
+get_color(level, triggered) =>
+    // col = change_color and (level < src) ? s_color : r_color    
+    col = change_color ? level >= change_color_level ? r_color : s_color : l_color
+    col := dim_triggered and triggered ? t_color : col
+    col
+
+l1_color = get_color(level1, triggered1)
+l2_color = get_color(level2, triggered2)
+l3_color = get_color(level3, triggered3)
+l4_color = get_color(level4, triggered4)
+l5_color = get_color(level5, triggered5)
+l6_color = get_color(level6, triggered6)
+l7_color = get_color(level7, triggered7)
+l8_color = get_color(level8, triggered8)
+l9_color = get_color(level9, triggered9)
+l10_color = get_color(level10, triggered10)
+
+// plot
+// you can't plot 10 levels because this will result in max plot outputs = 70 > 64 limit error. 
+// number of plot outputs is calculated as such: 2x plot x 2 colors + plotshape x 3 colors = 2 * 20 + 30 = 70. na is not a color. You must either have single color plots or < 10 levels.
+// at the current 63 plot outputs script responsiveness/redraw time after UI param change is 3 sec - acceptable
+
+
+
+plot_cond = alert_style == 'plot' and show_levels and barstate.islast
+plot(plot_cond and level1 > d and show_level1 ? level1 : na, color=l1_color, style=plot.style_circles, title='Level 1')
+plot(plot_cond and level2 > d and show_level2 ? level2 : na, color=l2_color, style=plot.style_circles, title='Level 2')
+plot(plot_cond and level3 > d and show_level3 ? level3 : na, color=l3_color, style=plot.style_circles, title='Level 3')
+plot(plot_cond and level4 > d and show_level4 ? level4 : na, color=l4_color, style=plot.style_circles, title='Level 4')
+plot(plot_cond and level5 > d and show_level5 ? level5 : na, color=l5_color, style=plot.style_circles, title='Level 5')
+plot(plot_cond and level6 > d and show_level6 ? level6 : na, color=l6_color, style=plot.style_circles, title='Level 6')
+plot(plot_cond and level7 > d and show_level7 ? level7 : na, color=l7_color, style=plot.style_circles, title='Level 7')
+plot(plot_cond and level8 > d and show_level8 ? level8 : na, color=l8_color, style=plot.style_circles, title='Level 8')
+plot(plot_cond and level9 > d and show_level9 ? level9 : na, color=l9_color, style=plot.style_circles, title='Level 9')
+plot(plot_cond and level10 > d and show_level10 ? level10 : na, color=l10_color, style=plot.style_circles, title='Level 10')
+
+line_cond = alert_style == 'price line' and show_levels  and barstate.islast
+// price line - similar result to checking price line in UI
+// never use hline - can't be inside if, doesn't support series, price/color cond, can't be changed dynamically or hidden with price/color=na, linewidth=0, remains always visible
+// you can't set trackprice and show_last from input - you need 2 sets of plots and a switch condition
+plot(line_cond and level1 > d and show_level1 ? level1 : na, color=l1_color, style=plot.style_line, title='Price Line 1', trackprice=true, show_last=1)
+plot(line_cond and level2 > d and show_level2 ? level2 : na, color=l2_color, style=plot.style_line, title='Price Line 2', trackprice=true, show_last=1)
+plot(line_cond and level3 > d and show_level3 ? level3 : na, color=l3_color, style=plot.style_line, title='Price Line 3', trackprice=true, show_last=1)
+plot(line_cond and level4 > d and show_level4 ? level4 : na, color=l4_color, style=plot.style_line, title='Price Line 4', trackprice=true, show_last=1)
+plot(line_cond and level5 > d and show_level5 ? level5 : na, color=l5_color, style=plot.style_line, title='Price Line 5', trackprice=true, show_last=1)
+plot(line_cond and level6 > d and show_level6 ? level6 : na, color=l6_color, style=plot.style_line, title='Price Line 6', trackprice=true, show_last=1)
+plot(line_cond and level7 > d and show_level7 ? level7 : na, color=l7_color, style=plot.style_line, title='Price Line 7', trackprice=true, show_last=1)
+plot(line_cond and level8 > d and show_level8 ? level8 : na, color=l8_color, style=plot.style_line, title='Price Line 8', trackprice=true, show_last=1)
+plot(line_cond and level9 > d and show_level9 ? level9 : na, color=l9_color, style=plot.style_line, title='Price Line 9', trackprice=true, show_last=1)
+plot(line_cond and level9 > d and show_level10 ? level10 : na, color=l10_color, style=plot.style_line, title='Price Line 10', trackprice=true, show_last=1)
+
+

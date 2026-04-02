@@ -1,0 +1,152 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+// The Goertzel algorithm is a technique in digital signal processing (DSP) for efficient evaluation of the individual terms of the discrete Fourier transform (DFT).
+// https://en.wikipedia.org/wiki/Goertzel_algorithm
+
+// See also:
+// Python implementation of the Goertzel algorithm for calculating DFT terms
+// https://gist.github.com/sebpiq/4128537
+
+
+//@version=5
+
+indicator('Goertzel algorithm (2024 v1.0)', overlay=false,max_bars_back=5000)
+len = input(17, title='Period length (recpirocal of frequency)')
+block_len = input(1024, title='Measurment Block Length (N in goertzel notation)')
+extend_multiplier = input.int(1, title="multipler of len to extend into future", minval=0)
+shift_multiplier = input.int(2, title="multipler of len to shift to match cycle with data", minval=0)
+shift_sample = input.int(256, title="Number of sample to match shift data", minval=0)
+pct_train = input.float(0.90,title="percent indecimal percent data to train", minval=0.25)
+auto_shift = input.bool(true,title="Do training of data")
+
+
+// CONSTANTS
+
+pi = 2 * math.asin(1)
+PI = pi
+tau = 2 * pi
+
+
+// The following function takes a vector x (your source) made of N samples, and computes the k-th frequency coefficient (k from 0 to N-1).
+// The real part is returned in as Inphase and the imaginary part is returned as Quadrature.
+// The Magnitude and Theta are also calculated
+
+// FUNCTIONS
+
+// Goertzel algorithm for integer k
+goertzel_int(x, k, N) =>
+    // Because our signal is a complex signal we have to comput both the real and imaginary
+    w = 2 * pi * k / N  // omega = (2 pi * number of bars in period)/Window length
+    w_real = math.cos(w)  // cos of omega (the real portion of omega)
+    w_imag = math.sin(w)  // sin of omega (the complex portion of omega)
+    c = 2 * w_real  // Coefficient 2* cos of omega (real part)
+    y = 0.0
+    z1 = 0.0
+    z2 = 0.0
+    //for n = 1 to N by 1  // Shound this be 0 to N-1???
+    for n = len to math.min(N * pct_train, bar_index)  by 1  // Shound this be 0 to N-1???
+        y := x[n] + c * z1 - z2
+        z2 := z1
+        z1 := y
+        z1
+    Inphase = w_real * z1 - z2  // Real
+    Quadrature = w_imag * z1  // Imag
+    Power = math.pow(z2, 2) + math.pow(z1, 2) - c * z1 * z2
+    Theta = math.atan(Inphase / Quadrature) * 2 * pi  // In radians
+    [Inphase, Quadrature, Power, Theta]
+
+
+// To do implement hamming
+hamm_f(_n, _N) =>
+    hamm = 0.54 - 0.46 * math.cos(tau * (_n / (_N - 1)))
+    hamm
+
+// Inputs
+src = input(close)
+
+// dohamm=input(false)
+
+// recirpocal of frequency
+
+k = 0 
+max_bars = 0
+
+if barstate.islast
+    // Get the maximum available historical bars
+    max_bars := bar_index
+    // Set block_len to the minimum of max_bars and desired_block_len
+    block_len_ = math.min(max_bars, block_len)
+    k := block_len_ / len
+else
+    k := block_len / len
+
+// Create a label to display the maximum available historical bars
+var label_id = label.new(bar_index, high, "", style=label.style_none)
+label.set_xy(label_id, bar_index + 50, high)
+label.set_text(label_id, "Max Historical Bars: " + str.tostring(max_bars))
+label.set_textcolor(label_id, color.white)
+label.set_size(label_id, size.normal)
+
+
+
+[InPhase_real, Quadrature, Power, Theta] = goertzel_int(close, k, block_len)
+
+// Define the range of shift values to test
+min_shift = 0
+max_shift = len*shift_multiplier
+
+// Initialize variables to store the best shift value and correlation
+best_shift = 0
+var best_correlation = -1.0 // Declare best_correlation as a float type
+
+InPhase_real_aligned = 0.0
+Quadrature_aligned = 0.0
+Power_aligned = 0.0
+Theta_aligned = 0.0
+
+if auto_shift
+    // Iterate over the range of shift values
+    for shift = min_shift to max_shift
+        // Shift the resulting values
+        InPhase_real_shifted = InPhase_real[shift]
+        Quadrature_shifted = Quadrature[shift]
+        Power_shifted = Power[shift]
+        Theta_shifted = Theta[shift]
+
+        // Calculate the correlation between the shifted values and the close plot
+        sum_xy = 0.0
+        sum_x = 0.0
+        sum_y = 0.0
+        sum_x2 = 0.0
+        sum_y2 = 0.0
+    
+        for i = len to shift_sample - 1
+            x = Power_shifted[i]
+            y = close[i]
+            sum_xy := sum_xy + x * y
+            sum_x := sum_x + x
+            sum_y := sum_y + y
+            sum_x2 := sum_x2 + x * x
+            sum_y2 := sum_y2 + y * y
+    
+        correlation = (sum_xy - sum_x * sum_y / block_len) / math.sqrt((sum_x2 - sum_x * sum_x / block_len) * (sum_y2 - sum_y * sum_y / block_len))
+
+        // Update the best shift value and correlation if a higher correlation is found
+        if correlation > best_correlation
+            best_correlation := correlation
+            best_shift := shift
+
+    // Use the best shift value for the final alignment
+    InPhase_real_aligned := InPhase_real[best_shift]
+    Quadrature_aligned := Quadrature[best_shift]
+    Power_aligned := Power[best_shift]
+    Theta_aligned := Theta[best_shift]
+
+
+
+plot(InPhase_real, title='InPhase_real', color=color.new(color.red, 0), display=display.none)
+plot(Quadrature, title='Quadrature', color=color.new(color.blue, 0), display=display.none)
+plot(Theta, title='Theta', color=color.new(color.orange, 0), display=display.none)
+
+plot(auto_shift ? Power_aligned : Power, title='Power', color=color.new(color.green, 0),offset=len*extend_multiplier)
+

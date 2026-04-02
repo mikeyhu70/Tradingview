@@ -1,0 +1,119 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © congacindy
+
+//@version=5
+indicator('TD Sequential V2', shorttitle='913sig', overlay=true)
+
+// Define the lookback periods
+lookbackSetup = 4
+lookbackBonusSetup = 2
+
+// Initialize counters
+var int setupCountF = na
+var int setupCountR = na
+var int bonusCountF = na
+var int bonusCountR = na
+
+// Define the setup and bonus phases
+setupPhaseF = close < close[lookbackSetup]
+setupPhaseR = close > close[lookbackSetup]
+bonusPhaseF = close < close[lookbackBonusSetup]
+bonusPhaseR = close > close[lookbackBonusSetup]
+
+// Increment the setup counter when the setup phase is triggered and price is falling
+if setupPhaseF
+    setupCountF := na(setupCountF) ? 1 : setupCountF + 1
+    setupCountF
+else
+    setupCountF := na
+    setupCountF
+
+// Bonus increment to the bonus counter when the phase is triggered and price is falling
+if setupCountF > 9 and bonusPhaseF
+    bonusCountF := na(bonusCountF) ? 1 : bonusCountF + 1
+    bonusCountF
+else
+    bonusCountF := na
+    bonusCountF
+
+
+
+// Increment the setup counter when setup phase is triggered and price is rising
+if setupPhaseR
+    setupCountR := na(setupCountR) ? 1 : setupCountR + 1
+    setupCountR
+else
+    setupCountR := na
+    setupCountR
+
+// Bonus increment to the bonus counter when the phase is triggered and price is rising
+if setupCountR > 9 and bonusPhaseR
+    bonusCountR := na(bonusCountR) ? 1 : bonusCountR + 1
+    bonusCountR
+else
+    bonusCountR := na
+    bonusCountR
+
+
+
+
+// Plot the '7' on the chart when the setup phase is triggered 8 times in a row
+if not na(setupCountF) and setupCountF == 7
+    label.new(x=bar_index, y=low - syminfo.mintick * 2, text='7', color=color.rgb(33, 149, 243, 57), style=label.style_label_up, size=size.tiny)
+
+// Plot the '8' on the chart when the setup phase is triggered 8 times in a row
+if not na(setupCountF) and setupCountF == 8
+    label.new(x=bar_index, y=low - syminfo.mintick * 2, text='8', color=color.rgb(33, 149, 243, 23), style=label.style_label_up, size=size.tiny)
+
+// Plot the '9' on the chart when the setup phase is triggered 9 times in a row
+if not na(setupCountF) and setupCountF == 9
+    label.new(x=bar_index, y=low - syminfo.mintick * 2, text='9', color=color.rgb(76, 175, 79, 18), style=label.style_label_up, size=size.small)
+
+
+// Bonus Plots when price is falling
+
+// Plot the '11' on the chart when the bonus setup phase is triggered 
+if not na(bonusCountF) and bonusCountF == 2
+    label.new(x=bar_index, y=low - syminfo.mintick * 2, text='11', color=color.rgb(33, 243, 243, 70), style=label.style_label_up, size=size.tiny)
+
+// Plot the '12' on the chart when the bonus setup phase is triggered
+if not na(bonusCountF) and bonusCountF == 3
+    label.new(x=bar_index, y=low - syminfo.mintick * 2, text='12', color=color.rgb(33, 243, 233, 54), style=label.style_label_up, size=size.tiny)
+
+// Plot the '13' on the chart when the bonus setup phase is triggered 
+if not na(bonusCountF) and bonusCountF == 4
+    label.new(x=bar_index, y=low - syminfo.mintick * 2, text='13', color=color.rgb(235, 247, 247, 47), style=label.style_label_up, size=size.small)
+
+
+
+
+
+
+// Plot the '7' on the chart when the setup phase is triggered 8 times in a row when prices are rising
+if not na(setupCountR) and setupCountR == 7
+    label.new(x=bar_index, y=high - syminfo.mintick * 2, text='7', color=color.rgb(238, 255, 0, 73), style=label.style_label_down, size=size.tiny)
+
+// Plot the '8' on the chart when the setup phase is triggered 8 times in a row when prices are rising
+if not na(setupCountR) and setupCountR == 8
+    label.new(x=bar_index, y=high - syminfo.mintick * 2, text='8', color=color.rgb(255, 153, 0, 51), style=label.style_label_down, size=size.tiny)
+
+// Plot the '9' on the chart when the setup phase is triggered 9 times in a row when prices are rising
+if not na(setupCountR) and setupCountR == 9
+    label.new(x=bar_index, y=high - syminfo.mintick * 2, text='9', color=color.rgb(255, 82, 82, 44), style=label.style_label_down, size=size.small)
+
+
+
+// Bonus Plots when price is rising
+
+// Plot the '11' on the chart when the bonus setup phase is triggered 
+if not na(bonusCountR) and bonusCountR == 2
+    label.new(x=bar_index, y=high - syminfo.mintick * 2, text='11', color=color.rgb(33, 243, 243, 70), style=label.style_label_down, size=size.tiny)
+
+// Plot the '12' on the chart when the bonus setup phase is triggered
+if not na(bonusCountR) and bonusCountR == 3
+    label.new(x=bar_index, y=high - syminfo.mintick * 2, text='12', color=color.rgb(33, 243, 233, 54), style=label.style_label_down, size=size.tiny)
+
+// Plot the '13' on the chart when the bonus setup phase is triggered 
+if not na(bonusCountR) and bonusCountR == 4
+    label.new(x=bar_index, y=high - syminfo.mintick * 2, text='13', color=color.rgb(235, 247, 247, 47), style=label.style_label_down, size=size.small)
+

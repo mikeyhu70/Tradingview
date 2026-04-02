@@ -1,0 +1,868 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+//@version=5
+indicator('Hurst Peak Marker', overlay=false, format=format.price, precision=3, max_labels_count=500, max_lines_count=500) 
+
+//-------------------------------Inputs-------------------------------//
+source = input(hl2, 'Source', group="Bandpass Settings")
+bandWidth0 = input.float(0.00005, 'Bandwidth 1 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth1 = input.float(0.00005, 'Bandwidth 2 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidthh = input.float(0.00005, 'Bandwidth 5 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidthf = input.float(0.00005, 'Bandwidth 10 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth2 = input.float(0.00005, 'Bandwidth 20 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth4 = input.float(0.00005, 'Bandwidth 40 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth8 = input.float(0.00005, 'Bandwidth 80 Day', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth16 = input.float(0.00005, 'Bandwidth 20 Week', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth32 = input.float(0.00005, 'Bandwidth 40 Week', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth64 = input.float(0.00005, 'Bandwidth 18 Month', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth128 = input.float(0.00005, 'Bandwidth 54 Month', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth256 = input.float(0.00005, 'Bandwidth 9 Year', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidth512 = input.float(0.00005, 'Bandwidth 18 Year', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+bandWidthc = input.float(0.00004, 'Bandwidth Composite Line', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+
+mode_sel = input.string(title='Cycle Selection Mode ?', defval='Auto', options=['Auto', 'Manual'])
+mode_tsel = input.string(title='Peak Selection Mode ?', defval='Auto', options=['Auto', 'Manual'])
+mode_comp = input.string(title='Composite Line Multiplier Offset Mode ?', defval='Auto', options=['Auto', 'Manual'])
+mode_compl_sel = input.string(title='Composite Line Selection Mode ?', defval='Auto', options=['Auto', 'Manual'])
+mode_comp_sel = input.string(title='Composite Cycle Selection Mode ?', defval='Auto', options=['Auto', 'Manual'])
+mode_comp2 = input.string(title='Composite Cycle Multiplier Offset Mode ?', defval='Auto', options=['Auto', 'Manual'])
+mode_offset = input.string(title='Cycle Offset Mode ?', defval='Auto', options=['Auto', 'Manual'])
+ntradingdays = input.int(252, 'Number of Trading Days in a Year', minval=1)
+ncalendardays = input.int(365, 'Number of Days in a Year', minval=1)
+
+//bandWidth = input.float(0.025, 'Bandwidth', minval=0.0, maxval=1.0, step=0.001, group="Bandpass Settings")
+periodBandpass0 = input.float(1.1, '1 Day      ', minval=1, inline="1", group="Cycle Settings")
+periodBandpass1 = input.float(2.2, '2 Day    ', minval=1, inline="2", group="Cycle Settings")
+periodBandpassh = input.float(4.3, '5 Day      ', minval=2, inline="3", group="Cycle Settings")
+periodBandpassf = input.float(8.5, '10 Day    ', minval=2, inline="4", group="Cycle Settings")
+periodBandpass2 = input.float(17, '20 Day    ', minval=2, inline="5", group="Cycle Settings")
+periodBandpass4 = input.float(34.1, '40 Day    ', minval=2, inline="6", group="Cycle Settings")
+periodBandpass8 = input.float(68.2, '80 Day    ', minval=2, inline="7", group="Cycle Settings")
+periodBandpass16 = input.float(136.4, '20 Week ', minval=2, inline="8", group="Cycle Settings")
+periodBandpass32 = input.float(272.8, '40 Week ', minval=2, inline="9", group="Cycle Settings")
+periodBandpass64 = input.float(545.6, '18 Month', minval=2, inline="10", group="Cycle Settings")
+periodBandpass128 = input.float(1636.8, '54 Month', minval=2, inline="11", group="Cycle Settings")
+periodBandpass256 = input.float(3273.6, '9 Year    ', minval=2, inline="12", group="Cycle Settings")
+periodBandpass512 = input.float(6547.2, '18 Year  ', minval=2, inline="13", group="Cycle Settings")
+
+// -- Functions
+
+
+PriceFormat() =>
+    syminfo.mintick <= 0.00001 ? '0' : syminfo.mintick <= 0.0001 ? '0' : syminfo.mintick <= 0.001 ? '0' : syminfo.mintick <= 0.01 ? '0' : syminfo.mintick <= 0.1 ? '0' : '0'
+
+PriceFormat2() =>
+    syminfo.mintick <= 0.00001 ? '0.0' : syminfo.mintick <= 0.0001 ? '0.0' : syminfo.mintick <= 0.001 ? '0.0' : syminfo.mintick <= 0.01 ? '0.0' : syminfo.mintick <= 0.1 ? '0.0' : '0.0'
+
+f_resInMinutes() =>
+    _resInMinutes = timeframe.multiplier * (timeframe.isseconds ? 1. / 60 : timeframe.isminutes ? 1. : timeframe.isdaily ? 60. * 24 : timeframe.isweekly ? 60. * 24 * 7 : timeframe.ismonthly ? 60. * 24 * 30.4375 : na)
+    _resInMinutes
+
+f_timeFrom(_from, _qty, _units) =>
+    // _from  : starting time from where the offset is calculated: "bar" to start from the bar's starting time, "close" to start from the bar's closing time, "now" to start from the current time.
+    // _qty   : the +/- qty of _units of offset required. A "series float" can be used but it will be cast to a "series int".
+    // _units : string containing one of the seven allowed time units: "chart" (chart's resolution), "seconds", "minutes", "hours", "days", "months", "years".
+    // Dependency: f_resInMinutes().
+    int _timeFrom = na
+    // Remove any "s" letter in the _units argument, so we don't need to compare singular and plural unit names.
+    _unit = str.replace_all(_units, 's', '')
+    // Determine if we will calculate offset from the bar's time or from current time.
+    _t = _from == 'bar' ? time : _from == 'close' ? time_close : timenow
+    // Calculate time at offset.
+    if _units == 'chart'
+        // Offset in chart res multiples.
+        _timeFrom := int(_t + f_resInMinutes() * 60 * 1000 * _qty)
+        _timeFrom
+    else
+        // Add the required _qty of time _units to the _from starting time.
+        _year = year(_t) + (_unit == 'year' ? int(_qty) : 0)
+        _month = month(_t) + (_unit == 'month' ? int(_qty) : 0)
+        _day = dayofmonth(_t) + (_unit == 'day' ? int(_qty) : 0)
+        _hour = hour(_t) + (_unit == 'hour' ? int(_qty) : 0)
+        _minute = minute(_t) + (_unit == 'minute' ? int(_qty) : 0)
+        _second = second(_t) + (_unit == 'econd' ? int(_qty) : 0)
+        // Return the resulting time in ms Unix time format.
+        _timeFrom := timestamp(_year, _month, _day, _hour, _minute, _second)
+        _timeFrom
+
+f_calc_bar_time(offset) =>
+    ret = time + (time - time[1]) * offset
+    ret
+
+f_DaysBetween(t1, t2) =>
+    math.ceil((t1 - t2) / 86400000) + 1
+
+f_offsetTime(_userOffsetInput) =>
+
+    // init our _return variable
+    var int _return = na
+
+    // get current time
+    int _timeNow = time
+
+    // get difference between current bar time and previous bar time
+    int _timeSeg = time - time[1]
+
+    // multiply the segment by the user input
+    int _segMult = _timeSeg * _userOffsetInput
+
+    // return time now + multiplied time segment for offset, giving us our
+    // +1|2|3 etc. OR -1|2|3 location depending on user input.
+    _return := _timeNow + _segMult
+    _return
+
+
+// Color Selection
+fld18y = #5E0F0B
+fld9y = #DB241A
+fld54m = #D47A35
+fld18m = #C4B727
+fld40w = #62E322
+fld20w = #3C8A15
+fld80 = #67A5A8
+fld40 = #161861
+fld20 = #9658E1
+fld10 = #D15C7B
+fld5 = #E386C2
+fld2 = #B80D18
+fld1 = #FF7F50
+fld5h = #FFB836
+fld0 = color.gray
+
+//colh = input.color(color.purple, " ", inline="1", group="Cycle Settings")
+//colf = input.color(color.blue, " ", inline="2", group="Cycle Settings")
+//col2 = input.color(color.aqua, " ", inline="3", group="Cycle Settings")
+//col4 = input.color(color.green, " ", inline="4", group="Cycle Settings")
+//col8 = input.color(color.yellow, " ", inline="5", group="Cycle Settings")
+//col16 = input.color(color.orange, " ", inline="6", group="Cycle Settings")
+//col32 = input.color(color.red, " ", inline="7", group="Cycle Settings")
+//col64 = input.color(#856c44, " ", inline="8", group="Cycle Settings")
+//col128 = input.color(color.black, " ", inline="9", group="Cycle Settings")
+//col256 = input.color(color.gray, " ", inline="10", group="Cycle Settings")
+//col512 = input.color(color.white, " ", inline="11", group="Cycle Settings")
+//colcompu = input.color(color.new(#00ff0a, 70), "Composite Model Candle Colors", inline="12", group="Cycle Settings") 
+//colcompd = input.color(color.new(#ff0000, 70), " ", inline="12", group="Cycle Settings") 
+
+//color_col2= periodBandpass2 > 5500 ? fld18y : periodBandpass2 > 2500 ? fld9y : periodBandpass2 > 1000 ? fld54m : periodBandpass2 > 400 ? fld18m : periodBandpass2 > 200 ? fld40w : periodBandpass2 > 100 ? fld20w : periodBandpass2 > 55 ? fld80 : periodBandpass2 > 25 ? fld40 : periodBandpass2 > 12 ? fld20 : periodBandpass2 > 7 ? fld10 : periodBandpass2 > 3.2 ? fld5 : periodBandpass2 > 2 ? fld2 : periodBandpass2 > 1 ? fld1 : _auto_fld2 > 0.15 ? fld5h : fld0
+
+
+col0 = input.color(fld1, " ", inline="1", group="Cycle Settings")
+col1 = input.color(fld2, " ", inline="2", group="Cycle Settings")
+colh = input.color(fld5, " ", inline="3", group="Cycle Settings")
+colf = input.color(fld10, " ", inline="4", group="Cycle Settings")
+col2 = input.color(fld20, " ", inline="5", group="Cycle Settings")
+col4 = input.color(fld40, " ", inline="6", group="Cycle Settings")
+col8 = input.color(fld80, " ", inline="7", group="Cycle Settings")
+col16 = input.color(fld20w, " ", inline="8", group="Cycle Settings")
+col32 = input.color(fld40w, " ", inline="9", group="Cycle Settings")
+col64 = input.color(fld18m, " ", inline="10", group="Cycle Settings")
+col128 = input.color(fld54m, " ", inline="11", group="Cycle Settings")
+col256 = input.color(fld9y, " ", inline="12", group="Cycle Settings")
+col512 = input.color(fld18y, " ", inline="13", group="Cycle Settings")
+
+colcompu = input.color(color.new(#00ff0a, 70), "Composite Model Candle Colors", inline="14", group="Cycle Settings") 
+colcompd = input.color(color.new(#ff0000, 70), " ", inline="14", group="Cycle Settings") 
+
+
+// Composite Selection
+comp0 = input.bool(false, "Composite", inline="1", group="Cycle Settings")
+comp1 = input.bool(true, "Composite", inline="2", group="Cycle Settings")
+comph = input.bool(true, "Composite", inline="3", group="Cycle Settings")
+compf = input.bool(true, "Composite", inline="4", group="Cycle Settings")
+comp2 = input.bool(true, "Composite", inline="5", group="Cycle Settings")
+comp4 = input.bool(true, "Composite", inline="6", group="Cycle Settings")
+comp8 = input.bool(false, "Composite", inline="7", group="Cycle Settings")
+comp16 = input.bool(false, "Composite", inline="8", group="Cycle Settings")
+comp32 = input.bool(false, "Composite", inline="9", group="Cycle Settings")
+comp64 = input.bool(false, "Composite", inline="10", group="Cycle Settings")
+comp128 = input.bool(false, "Composite", inline="11", group="Cycle Settings")
+comp256 = input.bool(false, "Composite", inline="12", group="Cycle Settings")
+comp512 = input.bool(false, "Composite", inline="13", group="Cycle Settings")
+compdisplay = input.bool(false, "Composite Line", inline="14", group="Cycle Settings")
+compcycle = input.bool(true, "Composite Cycle", inline="15", group="Cycle Settings")
+
+
+// Though and Peak Marker
+
+tcomp0 = input.bool(false, "Peak 1 Day", inline="1", group="Cycle Settings 3")
+tcomp1 = input.bool(false, "Peak 2 Day", inline="2", group="Cycle Settings 3")
+tcomph = input.bool(true, "Peak 5 Day", inline="3", group="Cycle Settings 3")
+tcompf = input.bool(true, "Peak 10 Day", inline="4", group="Cycle Settings 3")
+tcomp2 = input.bool(true, "Peak 20 Day", inline="5", group="Cycle Settings 3")
+tcomp4 = input.bool(true, "Peak 40 Day", inline="6", group="Cycle Settings 3")
+tcomp8 = input.bool(true, "Peak 80 Day", inline="7", group="Cycle Settings 3")
+tcomp16 = input.bool(true, "Peak 20 Week", inline="8", group="Cycle Settings 3")
+tcomp32 = input.bool(true, "Peak 40 Week", inline="9", group="Cycle Settings 3")
+tcomp64 = input.bool(true, "Peak 18 Month", inline="10", group="Cycle Settings 3")
+tcomp128 = input.bool(true, "Peak 54 Month", inline="11", group="Cycle Settings 3")
+tcomp256 = input.bool(true, "Peak 9 Year", inline="12", group="Cycle Settings 3")
+tcomp512 = input.bool(true, "Peak 18 Year", inline="13", group="Cycle Settings 3")
+
+// Offset Selection
+_ocomp0 = input.float(0, step=0.5, title= "1 Day Offset Multiplier", inline="1", group="Cycle Settings 2")
+_ocomp1 = input.float(0, step=0.5, title= "2 Day Offset Multiplier", inline="2", group="Cycle Settings 2")
+_ocomph = input.float(0, step=0.5, title= "5 Day Offset Multiplier", inline="3", group="Cycle Settings 2")
+_ocompf = input.float(0, step=0.5, title= "10 Day Offset Multiplier", inline="4", group="Cycle Settings 2")
+_ocomp2 = input.float(0, step=0.5, title= "20 Day Offset Multiplier", inline="5", group="Cycle Settings 2")
+_ocomp4 = input.float(0, step=0.5, title= "40 Day Offset Multiplier", inline="6", group="Cycle Settings 2")
+_ocomp8 = input.float(0, step=0.5, title= "80 Day Offset Multiplier", inline="7", group="Cycle Settings 2")
+_ocomp16 = input.float(0, step=0.5, title= "20 Week Offset Multiplier", inline="8", group="Cycle Settings 2")
+_ocomp32 = input.float(0, step=0.5, title= "40 Week Offset Multiplier", inline="9", group="Cycle Settings 2")
+_ocomp64 = input.float(0, step=0.5, title= "18 Month Offset Multiplier", inline="10", group="Cycle Settings 2")
+_ocomp128 = input.float(0, step=0.5, title= "54 Month Offset Multiplier", inline="11", group="Cycle Settings 2")
+_ocomp256 = input.float(0, step=0.5, title= "9 Year Offset Multiplier", inline="12", group="Cycle Settings 2")
+_ocomp512 = input.float(0, step=0.5, title= "18 Year Offset Multiplier", inline="13", group="Cycle Settings 2")
+_ocomps = input.float(0, "Composite Line Offset Multiplier", inline="14", group="Cycle Settings 2")
+compcyclediv = input.int(2, "Composite Cycle Divider", inline="17", group="Cycle Settings 2")
+complinediv = input.int(1, "Composite Line Divider", inline="15", group="Cycle Settings 2")
+_ocomps2 = input.float(0, "Composite Cycle Offset Multiplier", inline="16", group="Cycle Settings 2")
+cyclediv0 = input.int(1, "1 Day Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv1 = input.int(1, "2 Day Cycle Divider", inline="18", group="Cycle Settings 2")
+cycledivh = input.int(1, "5 Day Cycle Divider", inline="18", group="Cycle Settings 2")
+cycledivf = input.int(1, "10 Day Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv2 = input.int(1, "20 Day Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv4 = input.int(1, "40 Day Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv8 = input.int(1, "20 Day Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv16 = input.int(1, "20 Week Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv32 = input.int(1, "40 Week Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv64 = input.int(1, "18 Month Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv128 = input.int(1, "54 Month Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv256 = input.int(1, "9 Year Cycle Divider", inline="18", group="Cycle Settings 2")
+cyclediv512 = input.int(1, "18 Year Cycle Divider", inline="18", group="Cycle Settings 2")
+//__ocomps = timeframe.period == 'M' ? 0: timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+//__ocomps = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 2 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+__ocomps = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 4 : timeframe.period == 'D' ? 4 : timeframe.period == '240' ? 8 : timeframe.period == '120' ? 8 : timeframe.period == '60' ? 8 : timeframe.period == '30' ? 8 : timeframe.period == '15' ? 8 : timeframe.period == '10' ? 8 : timeframe.period == '5' ? 8 : 0
+ocomps  = mode_comp == 'Auto' ? __ocomps : _ocomps
+
+__ocomps2 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 4 : timeframe.period == '240' ? 4 : timeframe.period == '120' ? 8 : timeframe.period == '60' ? 8 : timeframe.period == '30' ? 8 : timeframe.period == '15' ? 8 : timeframe.period == '10' ? 8 : timeframe.period == '5' ? 8 : 0
+ocomps2  = mode_comp2 == 'Auto' ? __ocomps2 : _ocomps2
+
+__ocomp0 = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 4 : timeframe.period == 'D' ? 4 : timeframe.period == '240' ? 4 : timeframe.period == '120' ? 8 : timeframe.period == '60' ? 8 : timeframe.period == '30' ? 8 : timeframe.period == '15' ? 8 : timeframe.period == '10' ? 8 : timeframe.period == '5' ? 8 : 0
+__ocomp1 = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 4 : timeframe.period == 'D' ? 4 : timeframe.period == '240' ? 4 : timeframe.period == '120' ? 8 : timeframe.period == '60' ? 8 : timeframe.period == '30' ? 8 : timeframe.period == '15' ? 8 : timeframe.period == '10' ? 8 : timeframe.period == '5' ? 8 : 0
+__ocomph = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 4 : timeframe.period == 'D' ? 4 : timeframe.period == '240' ? 4 : timeframe.period == '120' ? 8 : timeframe.period == '60' ? 8 : timeframe.period == '30' ? 8 : timeframe.period == '15' ? 8 : timeframe.period == '10' ? 8 : timeframe.period == '5' ? 8 : 0
+__ocompf = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 4 : timeframe.period == 'D' ? 4 : timeframe.period == '240' ? 2 : timeframe.period == '120' ? 4 : timeframe.period == '60' ? 4 : timeframe.period == '30' ? 4 : timeframe.period == '15' ? 4 : timeframe.period == '10' ? 4 : timeframe.period == '5' ? 4 : 0
+__ocomp2 = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 4 : timeframe.period == 'D' ? 4 : timeframe.period == '240' ? 2 : timeframe.period == '120' ? 4 : timeframe.period == '60' ? 4 : timeframe.period == '30' ? 4 : timeframe.period == '15' ? 4 : timeframe.period == '10' ? 4 : timeframe.period == '5' ? 4 : 0
+__ocomp4 = timeframe.period == 'M' ? 4: timeframe.period == 'W' ? 4 : timeframe.period == 'D' ? 2 : timeframe.period == '240' ? 2 : timeframe.period == '120' ? 4 : timeframe.period == '60' ? 4 : timeframe.period == '30' ? 4 : timeframe.period == '15' ? 4 : timeframe.period == '10' ? 4 : timeframe.period == '5' ? 4 : 0
+__ocomp8 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 2 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 2 : timeframe.period == '60' ? 2 : timeframe.period == '30' ? 2 : timeframe.period == '15' ? 2 : timeframe.period == '10' ? 2 : timeframe.period == '5' ? 2 : 0
+__ocomp16 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 2 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 2 : timeframe.period == '60' ? 2 : timeframe.period == '30' ? 2 : timeframe.period == '15' ? 2 : timeframe.period == '10' ? 2 : timeframe.period == '5' ? 2 : 0
+__ocomp32 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 2 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+__ocomp64 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+__ocomp128 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+__ocomp256 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+__ocomp512 = timeframe.period == 'M' ? 2: timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+
+ocomp0 = mode_offset == 'Auto' ? __ocomp0 : _ocomp0
+ocomp1 = mode_offset == 'Auto' ? __ocomp1 : _ocomp1
+ocomph = mode_offset == 'Auto' ? __ocomph : _ocomph
+ocompf = mode_offset == 'Auto' ? __ocompf : _ocompf
+ocomp2 = mode_offset == 'Auto' ? __ocomp2 : _ocomp2
+ocomp4 = mode_offset == 'Auto' ? __ocomp4 : _ocomp4
+ocomp8 = mode_offset == 'Auto' ? __ocomp8 : _ocomp8
+ocomp16 = mode_offset == 'Auto' ? __ocomp16 : _ocomp16
+ocomp32 = mode_offset == 'Auto' ? __ocomp32 : _ocomp32
+ocomp64 = mode_offset == 'Auto' ? __ocomp64 : _ocomp64
+ocomp128 = mode_offset == 'Auto' ? __ocomp128 : _ocomp128
+ocomp256 = mode_offset == 'Auto' ? __ocomp256 : _ocomp256
+ocomp512 = mode_offset == 'Auto' ? __ocomp512 : _ocomp512
+
+
+
+// Force Cycle Display
+dcomp0 = input.bool(false, "Non-Auto Selection", inline="1", group="Cycle Settings")
+dcomp1 = input.bool(false, "Non-Auto Selection", inline="2", group="Cycle Settings")
+dcomph = input.bool(false, "Non-Auto Selection", inline="3", group="Cycle Settings")
+dcompf = input.bool(false, "Non-Auto Selection", inline="4", group="Cycle Settings")
+dcomp2 = input.bool(false, "Non-Auto Selection", inline="5", group="Cycle Settings")
+dcomp4 = input.bool(false, "Non-Auto Selection", inline="6", group="Cycle Settings")
+dcomp8 = input.bool(false, "Non-Auto Selection", inline="7", group="Cycle Settings")
+dcomp16 = input.bool(false, "Non-Auto Selection", inline="8", group="Cycle Settings")
+dcomp32 = input.bool(false, "Non-Auto Selection", inline="9", group="Cycle Settings")
+dcomp64 = input.bool(false, "Non-Auto Selection", inline="10", group="Cycle Settings")
+dcomp128 = input.bool(false, "Non-Auto Selection", inline="11", group="Cycle Settings")
+dcomp256 = input.bool(false, "Non-Auto Selection", inline="12", group="Cycle Settings")
+dcomp512 = input.bool(false, "Non-Auto Selection", inline="13", group="Cycle Settings")
+
+// Analysis Inputs
+mode_sig_in = input.string(title='Bandpass Analysis Mode ?', defval='Manual', options=['Auto', 'Manual'])
+_sig_in = input.string("None", "Bandpass for Analysis", options=["5 Day", "10 Day", "20 Day", "40 Day", "80 Day", "20 Week", "40 Week", "18 Month", "54 Month", "9 Year", "18 Year", "None"], group="Analysis Settings")
+decimals = input.int(2, 'Price Decimals', minval=0, maxval=10, group="Analysis Settings")
+
+//////
+auto_sig_in = timeframe.period == 'M' ? "40 Week" : timeframe.period == 'W' ? "20 Week" : timeframe.period == 'D' ? "40 Day": timeframe.period == '240' ? "20 Day" : timeframe.period == '120' ? "10 Day" : timeframe.period == '60' ? "5 Day" : timeframe.period == '30' ? "5 Day" : timeframe.period == '15' ? "5 Day" : timeframe.period == '10' ? "2 Day": timeframe.period == '5' ? "2 Day" : "20 Day"
+//////
+
+
+
+
+sig_in  = mode_sig_in == 'Auto' ? auto_sig_in : _sig_in
+
+//-------------------------------Functions & Calculations-------------------------------//
+// @TMPascoe found & offered this bandpass by @HPotter found here https://www.tradingview.com/script/A1jhw5fG-Bandpass-Filter/
+//      @BarefootJoey turned the code into a function and made it accept float Period
+bpf(Series, float Period, Delta) =>
+    float tmpbpf = na 
+    var beta = math.cos(3.14 * (360 / Period) / 180)
+    var gamma = 1 / math.cos(3.14 * (720 * Delta / Period) / 180)
+    var alpha = gamma - math.sqrt(gamma * gamma - 1)
+    tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+
+//// Individual Bandpass Filters
+//BPFh = bpf(source, periodBandpassh, bandWidth)
+//BPFf = bpf(source, periodBandpassf, bandWidth)
+//BPF2 = bpf(source, periodBandpass2, bandWidth)
+//BPF4 = bpf(source, periodBandpass4, bandWidth)
+//BPF8 = bpf(source, periodBandpass8, bandWidth)
+//BPF16 = bpf(source, periodBandpass16, bandWidth)
+//BPF32 = bpf(source, periodBandpass32, bandWidth)
+//BPF64 = bpf(source, periodBandpass64, bandWidth)
+//BPF128 = bpf(source, periodBandpass128, bandWidth)
+//BPF256 = bpf(source, periodBandpass256, bandWidth)
+
+
+mode_multiplier2 = input.string(title='Auto Multiplier?', defval='Auto', options=['Auto', 'Manual'])
+Multiplier2 = input(title='Bars in TF Period', defval=1)
+instrument_type = syminfo.type
+auto_multiplier_stock = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 6.5 / (timeframe.multiplier / 60)
+auto_multiplier_stock_extended = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 16 / (timeframe.multiplier / 60) - 1
+auto_multiplier_others = timeframe.period == 'M' ? 0.04 : timeframe.period == 'W' ? 0.20 : timeframe.period == 'D' ? 1 : 22 / (timeframe.multiplier / 60)
+_auto_multiplier2 = mode_multiplier2 == 'Manual' ? Multiplier2 : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.regular ? auto_multiplier_stock : (instrument_type != 'futures' or instrument_type != 'forex' or instrument_type != 'crypto') and mode_multiplier2 == 'Auto' and syminfo.session == session.extended ? auto_multiplier_stock_extended : auto_multiplier_others
+
+// Individual Bandpass Filters
+//252 trading days in a year
+
+BPF0 = bpf(source, periodBandpass0*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth0)
+BPF1 = bpf(source, periodBandpass1*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth1)
+BPFh = bpf(source, periodBandpassh*ntradingdays/ncalendardays*_auto_multiplier2, bandWidthh)
+BPFf = bpf(source, periodBandpassf*ntradingdays/ncalendardays*_auto_multiplier2, bandWidthf)
+BPF2 = bpf(source, periodBandpass2*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth2)
+BPF4 = bpf(source, periodBandpass4*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth4)
+BPF8 = bpf(source, periodBandpass8*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth8)
+BPF16 = bpf(source, periodBandpass16*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth16)
+BPF32 = bpf(source, periodBandpass32*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth32)
+BPF64 = bpf(source, periodBandpass64*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth64)
+BPF128 = bpf(source, periodBandpass128*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth128)
+BPF256 = bpf(source, periodBandpass256*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth256)
+BPF512 = bpf(source, periodBandpass512*ntradingdays/ncalendardays*_auto_multiplier2, bandWidth512)
+
+BPF0_2 = bpf(source, int(periodBandpass0*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth0)
+BPF1_2 = bpf(source, int(periodBandpass1*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth1)
+BPFh_2 = bpf(source, int(periodBandpassh*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidthh)
+BPFf_2 = bpf(source, int(periodBandpassf*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidthf)
+BPF2_2 = bpf(source, int(periodBandpass2*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth2)
+BPF4_2 = bpf(source, int(periodBandpass4*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth4)
+BPF8_2 = bpf(source, int(periodBandpass8*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth8)
+BPF16_2 = bpf(source, int(periodBandpass16*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth16)
+BPF32_2 = bpf(source, int(periodBandpass32*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth32)
+BPF64_2 = bpf(source, int(periodBandpass64*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth64)
+BPF128_2 = bpf(source, int(periodBandpass128*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth128)
+BPF256_2 = bpf(source, int(periodBandpass256*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth256)
+BPF512_2 = bpf(source, int(periodBandpass512*ntradingdays/ncalendardays*_auto_multiplier2/complinediv), bandWidth512)
+
+_comp_sel_BPF0 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 1 : 0
+_comp_sel_BPF1 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1: timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+_comp_sel_BPFh = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+_comp_sel_BPFf = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF2 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF4 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0: timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF8 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF16 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF32 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF64 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF128 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF256 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_comp_sel_BPF512 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+
+_compl_sel_BPF0 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 1 : 0
+_compl_sel_BPF1 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1: timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+_compl_sel_BPFh = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+_compl_sel_BPFf = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF2 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF4 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0: timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF8 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF16 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF32 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF64 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF128 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF256 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_compl_sel_BPF512 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+
+
+scompl0  = (mode_compl_sel == 'Auto' and _compl_sel_BPF0) ? 1 : mode_compl_sel == 'Manual' ? comp0 : 0
+scompl1  = (mode_compl_sel == 'Auto' and _compl_sel_BPF1) ? 1 : mode_compl_sel == 'Manual' ? comp1: 0
+scomplh  = (mode_compl_sel == 'Auto' and _compl_sel_BPFh) ? 1 : mode_compl_sel == 'Manual' ? comph : 0
+scomplf  = (mode_compl_sel == 'Auto' and _compl_sel_BPFf) ? 1 : mode_compl_sel == 'Manual' ? compf : 0
+scompl2  = (mode_compl_sel == 'Auto' and _compl_sel_BPF2) ? 1 : mode_compl_sel == 'Manual' ? comp2 : 0
+scompl4  = (mode_compl_sel == 'Auto' and _compl_sel_BPF4) ? 1 : mode_compl_sel == 'Manual' ? comp4 : 0
+scompl8  = (mode_compl_sel == 'Auto' and _compl_sel_BPF8) ? 1 : mode_compl_sel == 'Manual' ? comp8 : 0
+scompl16  = (mode_compl_sel == 'Auto' and _compl_sel_BPF16) ? 1 : mode_compl_sel == 'Manual' ? comp16 : 0
+scompl32  = (mode_compl_sel == 'Auto' and _compl_sel_BPF32) ? 1 : mode_compl_sel == 'Manual' ? comp32 : 0
+scompl64  = (mode_compl_sel == 'Auto' and _compl_sel_BPF64) ? 1 : mode_compl_sel == 'Manual' ? comp64 : 0
+scompl128  = (mode_compl_sel == 'Auto' and _compl_sel_BPF128) ? 1 : mode_compl_sel == 'Manual' ? comp128 : 0
+scompl256  = (mode_compl_sel == 'Auto' and _compl_sel_BPF256) ? 1 : mode_compl_sel == 'Manual' ? comp256 : 0
+scompl512  = (mode_compl_sel == 'Auto' and _compl_sel_BPF512) ? 1 : mode_compl_sel == 'Manual' ? comp512 : 0
+
+
+scomp0  = (mode_comp_sel == 'Auto' and _comp_sel_BPF0) ? 1 : mode_comp_sel == 'Manual' ? comp0 : 0
+scomp1  = (mode_comp_sel == 'Auto' and _comp_sel_BPF1) ? 1 : mode_comp_sel == 'Manual' ? comp1: 0
+scomph  = (mode_comp_sel == 'Auto' and _comp_sel_BPFh) ? 1 : mode_comp_sel == 'Manual' ? comph : 0
+scompf  = (mode_comp_sel == 'Auto' and _comp_sel_BPFf) ? 1 : mode_comp_sel == 'Manual' ? compf : 0
+scomp2  = (mode_comp_sel == 'Auto' and _comp_sel_BPF2) ? 1 : mode_comp_sel == 'Manual' ? comp2 : 0
+scomp4  = (mode_comp_sel == 'Auto' and _comp_sel_BPF4) ? 1 : mode_comp_sel == 'Manual' ? comp4 : 0
+scomp8  = (mode_comp_sel == 'Auto' and _comp_sel_BPF8) ? 1 : mode_comp_sel == 'Manual' ? comp8 : 0
+scomp16  = (mode_comp_sel == 'Auto' and _comp_sel_BPF16) ? 1 : mode_comp_sel == 'Manual' ? comp16 : 0
+scomp32  = (mode_comp_sel == 'Auto' and _comp_sel_BPF32) ? 1 : mode_comp_sel == 'Manual' ? comp32 : 0
+scomp64  = (mode_comp_sel == 'Auto' and _comp_sel_BPF64) ? 1 : mode_comp_sel == 'Manual' ? comp64 : 0
+scomp128  = (mode_comp_sel == 'Auto' and _comp_sel_BPF128) ? 1 : mode_comp_sel == 'Manual' ? comp128 : 0
+scomp256  = (mode_comp_sel == 'Auto' and _comp_sel_BPF256) ? 1 : mode_comp_sel == 'Manual' ? comp256 : 0
+scomp512  = (mode_comp_sel == 'Auto' and _comp_sel_BPF512) ? 1 : mode_comp_sel == 'Manual' ? comp512 : 0
+
+
+comp_t = 0.0
+comp_n = 0
+
+if scomp0
+    comp_t := comp_t + periodBandpass0*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp1
+    comp_t := comp_t + periodBandpass1*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomph
+    comp_t := comp_t + periodBandpassh*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scompf
+    comp_t := comp_t + periodBandpassf*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp2
+    comp_t := comp_t + periodBandpass2*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp4
+    comp_t := comp_t + periodBandpass4*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp8
+    comp_t := comp_t + periodBandpass8*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp16
+    comp_t := comp_t + periodBandpass16*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp32
+    comp_t := comp_t + periodBandpass32*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp64
+    comp_t := comp_t + periodBandpass64*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp128
+    comp_t := comp_t + periodBandpass128*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp256
+    comp_t := comp_t + periodBandpass256*_auto_multiplier2
+    comp_n := comp_n + 1
+
+if scomp512
+    comp_t := comp_t + periodBandpass512*_auto_multiplier2
+    comp_n := comp_n + 1
+
+offset_composite = int(ocomps * comp_t /comp_n)*ntradingdays/ncalendardays
+
+// Composite Line
+//compBPF = (scomp0?BPF0:0) + (scomp1?BPF1:0) + (scomph?BPFh:0) + (scompf?BPFf:0) + (scomp2?BPF2:0) + (scomp4?BPF4:0) + (scomp8?BPF8:0) + (scomp16?BPF16:0) + (scomp32?BPF32:0) + (scomp64?BPF64:0) + (scomp128?BPF128:0) + (scomp256?BPF256:0) + (scomp512?BPF512:0)
+compBPF = (scompl0?BPF0_2:0) + (scompl1?BPF1_2:0) + (scomplh?BPFh_2:0) + (scomplf?BPFf_2:0) + (scompl2?BPF2_2:0) + (scompl4?BPF4_2:0) + (scompl8?BPF8_2:0) + (scompl16?BPF16_2:0) + (scompl32?BPF32_2:0) + (scompl64?BPF64_2:0) + (scompl128?BPF128_2:0) + (scompl256?BPF256_2:0) + (scompl512?BPF512_2:0)
+
+col = ta.change(compBPF) > 0 ? colcompu : colcompd
+
+
+//Composite Cycle
+BPFcomp2= bpf(source, int(comp_t/comp_n)/compcyclediv, bandWidthc)
+//plot(offset_composite, title="Offset Composite")
+
+// Cycle Analysis
+// Truncate Decimals
+truncate(number, pricedecimals) =>
+    factor = math.pow(10, pricedecimals)
+    int(number * factor) / factor
+
+// Switch output/plot for analytics
+sig_out = sig_in == "1 Day" ? BPF0 :sig_in == "2 Day" ? BPF1 : sig_in == "5 Day" ? BPFh : sig_in == "10 Day" ? BPFf : sig_in == "20 Day" ? BPF2 : sig_in == "40 Day" ? BPF4 : sig_in == "80 Day" ? BPF8 : sig_in == "20 Week" ? BPF16 : sig_in == "40 Week" ? BPF32 : sig_in == "18 Month" ? BPF64 : sig_in == "54 Month" ? BPF128 : sig_in == "9 Year" ? BPF256 : sig_in == "18 Year" ? BPF512 : na
+
+period_out = sig_in == "1 Day" ? periodBandpass0 : sig_in == "2 Day" ? periodBandpass1 : sig_in == "5 Day" ? periodBandpassh : sig_in == "10 Day" ? periodBandpassf : sig_in == "20 Day" ? periodBandpass2 : sig_in == "40 Day" ? periodBandpass4 : sig_in == "80 Day" ? periodBandpass8 : sig_in == "20 Week" ? periodBandpass16 : sig_in == "40 Week" ? periodBandpass32 : sig_in == "18 Month" ? periodBandpass64 : sig_in == "54 Month" ? periodBandpass128 : sig_in == "9 Year" ? periodBandpass256 : sig_in == "18 Year" ? periodBandpass512 : 1 // :na 
+
+col_out = sig_in == "1 Day" ? col0 : sig_in == "1 Day" ? col1 : sig_in == "5 Day" ? colh : sig_in == "10 Day" ? colf : sig_in == "20 Day" ? col2 : sig_in == "40 Day" ? col4 : sig_in == "80 Day" ? col8 : sig_in == "20 Week" ? col16 : sig_in == "40 Week" ? col32 : sig_in == "18 Month" ? col64 : sig_in == "54 Month" ? col128 : sig_in == "9 Year" ? col256 : sig_in == "18 Year" ? col512 : color.gray
+
+
+// Highs/Lows
+hi = sig_out[2]<sig_out[1] and sig_out[1]>sig_out
+lo = sig_out[2]>sig_out[1] and sig_out[1]<sig_out
+
+
+hi0 = BPF0[2]<BPF0[1] and BPF0[1]>BPF0
+lo0 = BPF0[2]>BPF0[1] and BPF0[1]<BPF0
+
+hi1 = BPF1[2]<BPF1[1] and BPF1[1]>BPF1
+lo1 = BPF1[2]>BPF1[1] and BPF1[1]<BPF1
+
+hih = BPFh[2]<BPFh[1] and BPFh[1]>BPFh
+loh = BPFh[2]>BPFh[1] and BPFh[1]<BPFh
+
+hif = BPFf[2]<BPFf[1] and BPFf[1]>BPFf
+lof = BPFf[2]>BPFf[1] and BPFf[1]<BPFf
+
+hi2 = BPF2[2]<BPF2[1] and BPF2[1]>BPF2
+lo2 = BPF2[2]>BPF2[1] and BPF2[1]<BPF2
+
+hi4 = BPF4[2]<BPF4[1] and BPF4[1]>BPF4
+lo4 = BPF4[2]>BPF4[1] and BPF4[1]<BPF4
+
+hi8 = BPF8[2]<BPF8[1] and BPF8[1]>BPF8
+lo8 = BPF8[2]>BPF8[1] and BPF8[1]<BPF8
+
+hi16 = BPF16[2]<BPF16[1] and BPF16[1]>BPF16
+lo16 = BPF16[2]>BPF16[1] and BPF16[1]<BPF16
+
+hi32 = BPF32[2]<BPF32[1] and BPF32[1]>BPF32
+lo32 = BPF32[2]>BPF32[1] and BPF32[1]<BPF32
+
+hi64 = BPF64[2]<BPF64[1] and BPF64[1]>BPF64
+lo64 = BPF64[2]>BPF64[1] and BPF64[1]<BPF64
+
+hi128 = BPF128[2]<BPF128[1] and BPF128[1]>BPF128
+lo128 = BPF128[2]>BPF128[1] and BPF128[1]<BPF128
+
+hi256 = BPF256[2]<BPF256[1] and BPF256[1]>BPF256
+lo256 = BPF256[2]>BPF256[1] and BPF256[1]<BPF256
+
+hi512 = BPF512[2]<BPF512[1] and BPF512[1]>BPF512
+lo512 = BPF512[2]>BPF512[1] and BPF512[1]<BPF512
+
+hicomp = compBPF[2]<compBPF[1] and compBPF[1]>compBPF
+locomp = compBPF[2]>compBPF[1] and compBPF[1]<compBPF
+
+hicomp2 = BPFcomp2[2]<BPFcomp2[1] and BPFcomp2[1]>BPFcomp2
+locomp2 = BPFcomp2[2]>BPFcomp2[1] and BPFcomp2[1]<BPFcomp2
+
+//hi0 = BPF0[2+ocomp0]<BPF0[1+ocomp0] and BPF0[1+ocomp0]>BPF0[ocomp0]
+//lo0 = BPF0[2+ocomp0]>BPF0[1+ocomp0] and BPF0[1+ocomp0]<BPF0[ocomp0]
+
+//hi1 = BPF1[2+ocomp1]<BPF1[1+ocomp1] and BPF1[1+ocomp1]>BPF1[ocomp1]
+//lo1 = BPF1[2+ocomp1]>BPF1[1+ocomp1] and BPF1[1+ocomp1]<BPF1[ocomp1]
+
+//hih = BPFh[2+ocomph]<BPFh[1+ocomph] and BPFh[1+ocomph]>BPFh[ocomph]
+//loh = BPFh[2+ocomph]>BPFh[1+ocomph] and BPFh[1+ocomph]<BPFh[ocomph]
+
+//hif = BPFf[2+ocompf]<BPFf[1+ocompf] and BPFf[1+ocompf]>BPFf[ocompf]
+//lof = BPFf[2+ocompf]>BPFf[1+ocompf] and BPFf[1+ocompf]<BPFf[ocompf]
+
+//hi2 = BPF2[2+ocomp2]<BPF2[1+ocomp2] and BPF2[1+ocomp2]>BPF2[ocomp2]
+//lo2 = BPF2[2+ocomp2]>BPF2[1+ocomp2] and BPF2[1+ocomp2]<BPF2[ocomp2]
+
+//hi4 = BPF4[2+ocomp4]<BPF4[1+ocomp4] and BPF4[1+ocomp4]>BPF4[ocomp4]
+//lo4 = BPF4[2+ocomp4]>BPF4[1+ocomp4] and BPF4[1+ocomp4]<BPF4[ocomp4]
+
+//hi8 = BPF8[2+ocomp8]<BPF8[1+ocomp8] and BPF8[1+ocomp8]>BPF8[ocomp8]
+//lo8 = BPF8[2+ocomp8]>BPF8[1+ocomp8] and BPF8[1+ocomp8]<BPF8[ocomp8]
+
+//hi16 = BPF16[2+ocomp16]<BPF16[1+ocomp16] and BPF16[1+ocomp16]>BPF16[ocomp16]
+//lo16 = BPF16[2+ocomp16]>BPF16[1+ocomp16] and BPF16[1+ocomp16]<BPF16[ocomp16]
+
+//hi32 = BPF32[2+ocomp32]<BPF32[1+ocomp32] and BPF32[1+ocomp32]>BPF32[ocomp32]
+//lo32 = BPF32[2+ocomp32]>BPF32[1+ocomp32] and BPF32[1+ocomp32]<BPF32[ocomp32]
+
+//hi64 = BPF64[2+ocomp64]<BPF64[1+ocomp64] and BPF64[1+ocomp64]>BPF64[ocomp64]
+//lo64 = BPF64[2+ocomp64]>BPF64[1+ocomp64] and BPF64[1+ocomp64]<BPF64[ocomp64]
+
+//hi128 = BPF128[2+ocomp128]<BPF128[1+ocomp128] and BPF128[1+ocomp128]>BPF128[ocomp128]
+//lo128 = BPF128[2+ocomp128]>BPF128[1+ocomp128] and BPF128[1+ocomp128]<BPF128[ocomp128]
+
+//hi256 = BPF256[2+ocomp256]<BPF256[1+ocomp256] and BPF256[1+ocomp256]>BPF256[ocomp256]
+//lo256 = BPF256[2+ocomp256]>BPF256[1+ocomp256] and BPF256[1+ocomp256]<BPF256[ocomp256]
+
+//hi512 = BPF512[2+ocomp512]<BPF512[1+ocomp512] and BPF512[1+ocomp512]>BPF512[ocomp512]
+//lo512 = BPF512[2+ocomp512]>BPF512[1+ocomp512] and BPF512[1+ocomp512]<BPF512[ocomp512]
+
+
+// Define Crosses
+midcross = ta.cross(sig_out, 0)
+midcrossbars = ta.barssince(midcross)
+midcrossbars2 = ta.barssince(midcross)[1]
+last_wavelength = ta.barssince(midcross) - ta.barssince(midcross)
+
+// Bars Since Last Amp Hi & Lo
+xhi = ta.barssince(hi)
+xlo = ta.barssince(lo)
+
+xhi0 = ta.barssince(hi0)
+xlo0 = ta.barssince(lo0)
+
+xhi1 = ta.barssince(hi1)
+xlo1 = ta.barssince(lo1)
+
+xhih = ta.barssince(hih)
+xloh = ta.barssince(loh)
+
+xhif = ta.barssince(hif)
+xlof = ta.barssince(lof)
+
+xhi2 = ta.barssince(hi2)
+xlo2 = ta.barssince(lo2)
+
+xhi4 = ta.barssince(hi4)
+xlo4 = ta.barssince(lo4)
+
+xhi8 = ta.barssince(hi8)
+xlo8 = ta.barssince(lo8)
+
+xhi16 = ta.barssince(hi16)
+xlo16 = ta.barssince(lo16)
+
+xhi32 = ta.barssince(hi32)
+xlo32 = ta.barssince(lo32)
+
+xhi64 = ta.barssince(hi64)
+xlo64 = ta.barssince(lo64)
+
+xhi128 = ta.barssince(hi128)
+xlo128 = ta.barssince(lo128)
+
+xhi256 = ta.barssince(hi256)
+xlo256 = ta.barssince(lo256)
+
+xhi512 = ta.barssince(hi512)
+xlo512 = ta.barssince(lo512)
+
+xhicomp = ta.barssince(hicomp)
+xlocomp = ta.barssince(locomp)
+
+xhicomp2 = ta.barssince(hicomp2)
+xlocomp2 = ta.barssince(locomp2)
+
+// Wavelength   
+wavelength = math.round(math.abs(xhi0-xlo)*2)
+wavelength0 = math.round(math.abs(xhi0-xlo0)*2)
+wavelength1 = math.round(math.abs(xhi1-xlo1)*2)
+wavelengthh = math.round(math.abs(xhih-xloh)*2)
+wavelengthf = math.round(math.abs(xhif-xlof)*2)
+wavelength2 = math.round(math.abs(xhi2-xlo2)*2)
+wavelength4 = math.round(math.abs(xhi4-xlo4)*2)
+wavelength8 = math.round(math.abs(xhi8-xlo8)*2)
+wavelength16 = math.round(math.abs(xhi16-xlo16)*2)
+wavelength32 = math.round(math.abs(xhi32-xlo32)*2)
+wavelength64 = math.round(math.abs(xhi64-xlo64)*2)
+wavelength128 = math.round(math.abs(xhi128-xlo128)*2)
+wavelength256 = math.round(math.abs(xhi256-xlo256)*2)
+wavelength512 = math.round(math.abs(xhi512-xlo512)*2)
+wavelengthcomp = math.round(math.abs(xhicomp-xlocomp)*2)
+wavelengthcomp2 = math.round(math.abs(xhicomp2-xlocomp2)*2)
+
+
+// Last Amp Hi & Lo
+bpfphi = ta.highest(sig_out,math.round(period_out))
+bpfamphi = ta.valuewhen(bpfphi, sig_out, 0)
+bpfplo = ta.lowest(sig_out,math.round(period_out))
+bpfamplo = ta.valuewhen(bpfplo, sig_out, 0)
+tot_amp = bpfphi - bpfplo
+
+// Estimates/Forecasts
+next_peak = -math.abs(xhi-wavelength)
+next_trough = -math.abs(xlo-wavelength)
+next_node = math.abs(xhi-xlo)-midcrossbars
+
+next_peak0 = -math.abs(xhi0-wavelength0)
+next_trough0 = -math.abs(xlo0-wavelength0)
+
+next_peak1 = -math.abs(xhi1-wavelength1)
+next_trough1 = -math.abs(xlo1-wavelength1)
+
+next_peakh = -math.abs(xhih-wavelengthh)
+next_troughh = -math.abs(xloh-wavelengthh)
+
+next_peakf = -math.abs(xhif-wavelengthf)
+next_troughf = -math.abs(xlof-wavelengthf)
+
+next_peak2 = -math.abs(xhi2-wavelength2)
+next_trough2 = -math.abs(xlo2-wavelength2)
+
+next_peak4 = -math.abs(xhi4-wavelength4)
+next_trough4 = -math.abs(xlo4-wavelength4)
+
+next_peak8 = -math.abs(xhi8-wavelength8)
+next_trough8 = -math.abs(xlo8-wavelength8)
+
+next_peak16 = -math.abs(xhi16-wavelength16)
+next_trough16 = -math.abs(xlo16-wavelength16)
+
+next_peak32 = -math.abs(xhi32-wavelength32)
+next_trough32 = -math.abs(xlo32-wavelength32)
+
+next_peak64 = -math.abs(xhi64-wavelength64)
+next_trough64 = -math.abs(xlo64-wavelength64)
+
+next_peak128 = -math.abs(xhi128-wavelength128)
+next_trough128 = -math.abs(xlo128-wavelength128)
+
+next_peak256 = -math.abs(xhi256-wavelength256)
+next_trough256 = -math.abs(xlo256-wavelength256)
+
+next_peak512 = -math.abs(xhi512-wavelength512)
+next_trough512 = -math.abs(xlo512-wavelength512)
+
+next_peakcomp = -math.abs(xhicomp-wavelengthcomp)
+next_troughcomp = -math.abs(xlocomp-wavelengthcomp)
+
+next_peakcomp2 = -math.abs(xhicomp2-wavelengthcomp2)
+next_troughcomp2 = -math.abs(xlocomp2-wavelengthcomp2)
+
+// Highlight background of next peak/node/trough
+next_peak_col = color.new(color.red,hi?75:100)
+next_node_col = color.new(color.gray, midcross?75:100)
+next_trough_col = color.new(color.green, lo?75:100)
+
+// Sentiment 
+amp_sent = bpfphi>math.abs(bpfplo)?"🟢":bpfphi<math.abs(bpfplo)?"🔴":"⚪"
+bbwavelen = wavelength>period_out?"🟢":wavelength<period_out?"🔴":"⚪"
+bbpt = -next_peak<-next_trough?"Bullish🟢":-next_peak>-next_trough?"Bearish🔴":"Neutral⚪"
+
+
+// ------------------------------- Plots, Displays, Outputs -------------------------------//
+
+off0 = int(ocomp0*wavelength0/cyclediv0)
+off1 = int(ocomp1*wavelength1/cyclediv1)
+offh = int(ocomph*wavelengthh/cycledivh)
+offf = int(ocompf*wavelengthf/cycledivf)
+off2 = int(ocomp2*wavelength2/cyclediv2)
+off4 = int(ocomp4*wavelength4/cyclediv4)
+off8 = int(ocomp8*wavelength8/cyclediv8)
+off16 = int(ocomp16*wavelength16/cyclediv16)
+off32 = int(ocomp32*wavelength32/cyclediv32)
+off64 = int(ocomp64*wavelength64/cyclediv64)
+off128 = int(ocomp128*wavelength128/cyclediv128)
+off256 = int(ocomp256*wavelength256/cyclediv256)
+off512 = int(ocomp512*wavelength512/cyclediv512)
+offcomps = int(ocomps*wavelengthcomp/complinediv)
+offcomp2 = int(ocomps2*wavelengthcomp2/compcyclediv)
+
+boff0 = int(wavelength0/cyclediv0)
+boff1 = int(wavelength1/cyclediv1)
+boffh = int(wavelengthh/cycledivh)
+bofff = int(wavelengthf/cycledivf)
+boff2 = int(wavelength2/cyclediv2)
+boff4 = int(wavelength4/cyclediv4)
+boff8 = int(wavelength8/cyclediv8)
+boff16 = int(wavelength16/cyclediv16)
+boff32 = int(wavelength32/cyclediv32)
+boff64 = int(wavelength64/cyclediv64)
+boff128 = int(wavelength128/cyclediv128)
+boff256 = int(wavelength256/cyclediv256)
+boff512 = int(wavelength512/cyclediv512)
+boffcomps = int(wavelengthcomp/complinediv)
+boffcomp2 = int(wavelengthcomp2/compcyclediv)
+
+_display_BPF0 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+_display_BPF1 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+_display_BPFh = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 1 : timeframe.period == '5' ? 1 : 0
+_display_BPFf = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 1 : timeframe.period == '15' ? 1 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF2 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 1 : timeframe.period == '60' ? 1 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF4 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 1 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF8 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 1 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF16 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF32 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 1 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF64 = timeframe.period == 'M' ? 1 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF128 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF256 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_display_BPF512 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+
+
+display_BPF0 = mode_sel == 'Auto' ? _display_BPF0 : dcomp0
+display_BPF1 = mode_sel == 'Auto' ? _display_BPF1 : dcomp1
+display_BPFh = mode_sel == 'Auto' ? _display_BPFh : dcomph
+display_BPFf = mode_sel == 'Auto' ? _display_BPFf : dcompf
+display_BPF2 = mode_sel == 'Auto' ? _display_BPF2 : dcomp2
+display_BPF4 = mode_sel == 'Auto' ? _display_BPF4 : dcomp4
+display_BPF8 = mode_sel == 'Auto' ? _display_BPF8 : dcomp8
+display_BPF16 = mode_sel == 'Auto' ? _display_BPF16 : dcomp16
+display_BPF32 = mode_sel == 'Auto' ? _display_BPF32 : dcomp32
+display_BPF64 = mode_sel == 'Auto' ? _display_BPF64 : dcomp64
+display_BPF128 = mode_sel == 'Auto' ? _display_BPF128 : dcomp128
+display_BPF256 = mode_sel == 'Auto' ? _display_BPF256 : dcomp256
+display_BPF512 = mode_sel == 'Auto' ? _display_BPF512 : dcomp512
+
+
+
+//Plot Marker
+
+_tdisplay_BPF0 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 3 : timeframe.period == '5' ? 3 : 0
+_tdisplay_BPF1 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 3 : timeframe.period == '15' ? 3 : timeframe.period == '10' ? 2 : timeframe.period == '5' ? 2 : 0
+_tdisplay_BPFh = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 3 : timeframe.period == '60' ? 3 : timeframe.period == '30' ? 2 : timeframe.period == '15' ? 2 : timeframe.period == '10' ? 2 : timeframe.period == '5' ? 2 : 0
+_tdisplay_BPFf = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 3 : timeframe.period == '120' ? 2 : timeframe.period == '60' ? 2 : timeframe.period == '30' ? 2 : timeframe.period == '15' ? 2 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF2 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 3 : timeframe.period == '240' ? 2 : timeframe.period == '120' ? 2 : timeframe.period == '60' ? 2 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF4 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 2 : timeframe.period == '240' ? 2 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF8 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 3 : timeframe.period == 'D' ? 2 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF16 = timeframe.period == 'M' ? 3 : timeframe.period == 'W' ? 2 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF32 = timeframe.period == 'M' ? 2 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF64 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF128 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF256 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+_tdisplay_BPF512 = timeframe.period == 'M' ? 0 : timeframe.period == 'W' ? 0 : timeframe.period == 'D' ? 0 : timeframe.period == '240' ? 0 : timeframe.period == '120' ? 0 : timeframe.period == '60' ? 0 : timeframe.period == '30' ? 0 : timeframe.period == '15' ? 0 : timeframe.period == '10' ? 0 : timeframe.period == '5' ? 0 : 0
+
+tdisplay_BPF0 = mode_tsel == 'Auto' ? _tdisplay_BPF0 : tcomp0
+tdisplay_BPF1 = mode_tsel == 'Auto' ? _tdisplay_BPF1 : tcomp1
+tdisplay_BPFh = mode_tsel == 'Auto' ? _tdisplay_BPFh : tcomph
+tdisplay_BPFf = mode_tsel == 'Auto' ? _tdisplay_BPFf : tcompf
+tdisplay_BPF2 = mode_tsel == 'Auto' ? _tdisplay_BPF2 : tcomp2
+tdisplay_BPF4 = mode_tsel == 'Auto' ? _tdisplay_BPF4 : tcomp4
+tdisplay_BPF8 = mode_tsel == 'Auto' ? _tdisplay_BPF8 : tcomp8
+tdisplay_BPF16 = mode_tsel == 'Auto' ? _tdisplay_BPF16 : tcomp16
+tdisplay_BPF32 = mode_tsel == 'Auto' ? _tdisplay_BPF32 : tcomp32
+tdisplay_BPF64 = mode_tsel == 'Auto' ? _tdisplay_BPF64 : tcomp64
+tdisplay_BPF128 = mode_tsel == 'Auto' ? _tdisplay_BPF128 : tcomp128
+tdisplay_BPF256 = mode_tsel == 'Auto' ? _tdisplay_BPF256 : tcomp256
+tdisplay_BPF512 = mode_tsel == 'Auto' ? _tdisplay_BPF512 : tcomp512
+
+plotshape(tdisplay_BPF0 ? hi0 ? 0.052 : na : na, "1 Day Peak Marker", style=shape.triangledown, location=location.top, color=color.new(col0,60), size = size.tiny, offset=off0)
+plotshape(tdisplay_BPF1 ? hi1 ? 0.054 : na : na, "2 Day Peak Marker", style=shape.triangledown, location=location.top, color=color.new(col1,60), size = size.tiny, offset=off1)
+plotshape(tdisplay_BPFh ? hih ? 0.056 : na : na, "5 Day Peak Marker", style=shape.cross, location=location.top, color=color.new(colh,60), size = size.tiny, offset=offh)
+plotshape(tdisplay_BPFf ? hif ? 0.058 : na : na, "10 Day Peak Marker", style=shape.cross, location=location.top, color=color.new(colf,60), size = size.tiny, offset=offf)
+plotshape(tdisplay_BPF2 ? hi2 ? 0.060 : na : na, "20 Day Peak Marker", style=shape.arrowdown, location=location.top, color=color.new(col2,60), size = size.small, offset=off2)
+plotshape(tdisplay_BPF4 ? hi4 ? 0.062 : na : na, "40 Day Peak Marker", style=shape.arrowdown, location=location.top, color=color.new(col4,60), size = size.small, offset=off4)
+plotshape(tdisplay_BPF8 ? hi8 ? 0.064 : na : na, "80 Day Peak Marker", style=shape.arrowdown, location=location.top, color=color.new(col8,60), size = size.small, offset=off8)
+plotshape(tdisplay_BPF16 ? hi16 ? 0.066 : na : na, "20 Week Peak Marker", style=shape.diamond, location=location.top, color=color.new(col16,60), size = size.small, offset=off16)
+plotshape(tdisplay_BPF32 ? hi32 ? 0.068 : na : na, "40 Week Peak Marker", style=shape.diamond, location=location.top, color=color.new(col32,60), size = size.small, offset=off32)
+plotshape(tdisplay_BPF64 ? hi64 ? 0.070 : na : na, "18 Month Peak Marker", style=shape.xcross, location=location.top, color=color.new(col64,60), size = size.small, offset=off64)
+plotshape(tdisplay_BPF128 ? hi128 ? 0.072 : na : na, "54 Month Peak Marker", style=shape.xcross, location=location.top, color=color.new(col128,60), size = size.small, offset=off128)
+plotshape(tdisplay_BPF256 ? hi256 ? 0.074 : na : na, "9 Year Peak Marker", style=shape.square, location=location.top, color=color.new(col256,60), size = size.small, offset=off256)
+plotshape(tdisplay_BPF512 ? hi512 ? 0.076 : na : na, "18 Year Peak Marker", style=shape.square, location=location.top, color=color.new(col512,60), size = size.small, offset=off512)
+
+//plot(display_BPF0 ? hi0 ? 0.002: na: na , "1 Day Peak Marker", style=plot.style_circles, color=color.new(col0,50), linewidth=2, offset=ocomp2*int(periodBandpass0/cyclediv2))
+//plot(display_BPF1 ? hi1 ? 0.014: na: na , "2 Day Peak Marker", style=plot.style_circles, color=color.new(col1,50), linewidth=2, offset=ocomp2*int(periodBandpass1/cyclediv2))
+//plot(display_BPFh ? hih ? 0.016: na: na , "5 Day Peak Marker", style=plot.style_circles, color=color.new(colh,50), linewidth=2, offset=ocomp2*int(periodBandpassh/cyclediv2))
+//plot(display_BPFf ? hif ? 0.018: na: na , "10 Day Peak Marker", style=plot.style_circles, color=color.new(colf,50), linewidth=2, offset=ocomp2*int(periodBandpassf/cyclediv2))
+//plot(display_BPF2 ? hi2 ? 0.020: na: na , "20 Day Peak Marker", style=plot.style_circles, color=color.new(col2,50), linewidth=2, offset=ocomp2*int(periodBandpass2/cyclediv2))
+//plot(display_BPF4 ? hi4 ? 0.022: na: na , "40 Day Peak Marker", style=plot.style_circles, color=color.new(col4,50), linewidth=2, offset=ocomp2*int(periodBandpass4/cyclediv2))
+//plot(display_BPF8 ? hi8 ? 0.024: na: na , "80 Day Peak Marker", style=plot.style_circles, color=color.new(col8,50), linewidth=2, offset=ocomp2*int(periodBandpass8/cyclediv2))
+//plot(display_BPF16 ? hi16 ? 0.026: na: na , "20 Week Peak Marker", style=plot.style_circles, color=color.new(col16,50), linewidth=2, offset=ocomp2*int(periodBandpass16/cyclediv2))
+//plot(display_BPF32 ? hi32 ? 0.018: na: na , "40 Week Peak Marker", style=plot.style_circles, color=color.new(col32,50), linewidth=2, offset=ocomp2*int(periodBandpass32/cyclediv2))
+//plot(display_BPF64 ? hi64 ? 0.020: na: na , "18 Month Peak Marker", style=plot.style_circles, color=color.new(col64,50), linewidth=2, offset=ocomp2*int(periodBandpass64/cyclediv2))
+//plot(display_BPF128 ? hi128 ? -0.022: na: na , "54 Month Peak Marker", style=plot.style_circles, color=color.new(col128,50), linewidth=2, offset=ocomp2*int(periodBandpass128/cyclediv2))
+//plot(display_BPF256 ? hi256 ? -0.024: na: na , "9 Year Peak Marker", style=plot.style_circles, color=color.new(col256,50), linewidth=2, offset=ocomp2*int(periodBandpass256/cyclediv2))
+//plot(display_BPF512 ? hi512 ? -0.026: na: na , "18 Year Peak Marker", style=plot.style_circles, color=color.new(col512,50), linewidth=2, offset=ocomp2*int(periodBandpass512/cyclediv2))
+
+
+//compBPFb = (scomp0?BPF0_2[boff0]:0) + (scomp1?BPF1_2[boff1]:0) + (scomph?BPFh_2[boffh]:0) + (scompf?BPFf_2[bofff]:0) + (scomp2?BPF2_2[boff2]:0) + (scomp4?BPF4_2[boff4]:0) + (scomp8?BPF8_2[boff8]:0) + (scomp16?BPF16_2[boff16]:0) + (scomp32?BPF32_2[boff32]:0) + (scomp64?BPF64_2[boff64]:0) + (scomp128?BPF128_2[boff128]:0) + (scomp256?BPF256_2[boff256]:0) + (scomp512?BPF512_2[boff512]:0)
+//compBPFb = (scomp0?BPF0_2[boff0/complinediv]:0) + (scomp1?BPF1_2[boff1/complinediv]:0) + (scomph?BPFh_2[boffh/complinediv]:0) + (scompf?BPFf_2[bofff/complinediv]:0) + (scomp2?BPF2_2[boff2/complinediv]:0) + (scomp4?BPF4_2[boff4/complinediv]:0) + (scomp8?BPF8_2[boff8/complinediv]:0) + (scomp16?BPF16_2[boff16/complinediv]:0) + (scomp32?BPF32_2[boff32/complinediv]:0) + (scomp64?BPF64_2[boff64/complinediv]:0) + (scomp128?BPF128_2[boff128/complinediv]:0) + (scomp256?BPF256_2[boff256/complinediv]:0) + (scomp512?BPF512_2[boff512/complinediv]:0)
+
+compBPFb = (scomp0?BPF0_2[off0/complinediv]:0) + (scomp1?BPF1_2[off1/complinediv]:0) + (scomph?BPFh_2[offh/complinediv]:0) + (scompf?BPFf_2[offf/complinediv]:0) + (scomp2?BPF2_2[off2/complinediv]:0) + (scomp4?BPF4_2[off4/complinediv]:0) + (scomp8?BPF8_2[off8/complinediv]:0) + (scomp16?BPF16_2[off16/complinediv]:0) + (scomp32?BPF32_2[off32/complinediv]:0) + (scomp64?BPF64_2[off64/complinediv]:0) + (scomp128?BPF128_2[off128/complinediv]:0) + (scomp256?BPF256_2[off256/complinediv]:0) + (scomp512?BPF512_2[off512/complinediv]:0)
+
+
+plot (compdisplay ? compBPFb : na ,linewidth=1, title="Composite Line", color=color.new(color.yellow, 70), style=plot.style_circles, offset=offcomps)
+plot (compdisplay ? compBPFb : na ,linewidth=1, title="Composite Line", color=color.new(color.yellow, 70), style=plot.style_linebr, offset=offcomps)
+
+plot (compcycle ? BPFcomp2 : na ,linewidth=2, title="Composite Cycle", color=color.new(#d37c30, 40), style=plot.style_cross, offset=offcomp2)
+plot (compcycle ? BPFcomp2 : na ,linewidth=2, title="Composite Cycle", color=color.new(#d37c30, 40), style=plot.style_linebr, offset=offcomp2)

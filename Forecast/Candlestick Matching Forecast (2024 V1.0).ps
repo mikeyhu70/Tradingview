@@ -1,0 +1,366 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © congacindy
+
+//@version=5
+indicator('Candlestick Matching Forecast (2024 V1.0)', overlay=true,max_bars_back=5000)
+
+
+// Input parameters
+kp = input.int(5, title="Candlestick matching Red/Green pattern length (kp)", minval=1)
+kp_start = input.int (1, title="kp start matching index 0=today, 1 = yesterday", minval=0)
+kp_iteration=input.int(1,title="Max number of (kp) iterations (have to be less than kp)", minval=0)
+kp_trend=input.bool(true,title="Include Up/Down candlestick pattern (kp_trend)")
+kp_auto=input.bool(true,title="Auto match up/down pattern if there is no match (will nullify previous setting i.e kp_trend)")
+td = input.bool(false, title="TD demark flip setup? (if not contineous bar patten in kp length)")
+td_trend = input.bool(false, title="TD demark trend flip setup? (all first bars vs last bar logic)")
+lookback = input.int(4, "TD Demark Lookback Flip Bars", minval=4)
+y = input.int(5000, title='Lookback Bars', maxval=5000)
+forecast_periods = input.int(12, title='Number of Periods to Forecast', minval=1)
+_debug = input.bool(false, title="Show debug information?")
+
+txt_col_price = input.color(color.rgb(208, 227, 62), 'Text/Frame Color', group='Dashboard')
+txt_col_price_adj = input.color(color.rgb(231, 37, 237), 'Text/Frame Color', group='Dashboard')
+txt_col_date = input.color(color.rgb(48, 228, 241), 'Text/Frame Color', group='Dashboard')
+txt_col_pattern = input.color(color.rgb(238, 232, 166), 'Text/Frame Color', group='Dashboard')
+txt_col = input.color(color.rgb(182, 186, 200), 'Text/Frame Color', group='Dashboard')
+dash_loc = input.string('Mid Right', 'Dashboard Location', options=['Top Right', 'Bottom Right', 'Top Left', 'Mid Left', 'Mid Right'], group='Dashboard')
+text_size = input.string('Tiny', 'Dashboard Size', options=['Tiny', 'Small', 'Normal', 'Large'], group='Dashboard')
+debugtext_size = input.string('Tiny', 'Debug Dashboard Size', options=['Tiny', 'Small', 'Normal', 'Large'], group='Dashboard')
+debugdash_loc = input.string('Bottom Center', 'Debug Dashboard Location', options=['Top Left', 'Top Center', 'Top Right', 'Mid Left', 'Mid Center', ' Mid Right', 'Bottom Left', 'Bottom Center', 'Bottom Right'], group='Dashboard')
+
+// ****************************************************
+
+// Find Matching Pattern based on k last bar 
+
+get_bar_direction(i) =>
+    ret=""
+    if (close[i] >  close[i + 1])
+        ret := 'U'
+    else
+        ret := 'D'
+    ret
+
+get_bar_color(i) =>
+    ret = ""
+    if (close[i] - open[i] > 0)
+        ret := 'G'
+    else
+        ret := 'R'
+    ret
+
+// *********************** POPULATE ARRAY*****************************
+
+
+// 1 extra for kp since skipping the last day and start from previous day and for kp days
+
+last_j_bars = array.new_string(kp+kp_start+kp_iteration+1)
+last_j_dates = array.new_string(kp+kp_start+kp_iteration+1)
+last_jud_bars = array.new_string(kp+kp_start+kp_iteration+1)
+last_jud_dates = array.new_string(kp+kp_start+kp_iteration+1)
+
+for i = 0 to (kp - 1 + kp_start)
+    array.set(last_j_bars, i, get_bar_color(i))
+    array.set(last_j_dates, i, str.format("{0,date,yyyy-MM-dd}", time[i]))
+    array.set(last_jud_bars, i, get_bar_direction(i))
+    array.set(last_jud_dates, i, str.format("{0,date,yyyy-MM-dd}", time[i]))
+
+
+// ********************** TD Count ******************************
+
+// Function to check for Bullish TD Price Flip
+
+
+bullishFlip(i,match) =>
+    bool isBullish = true
+    if match
+        //isBullish := (open [i+2] > close[i+2])  and (open [i+3] > close[i+3]) and (open [i+4] > close[i+4]) and (open [i+5] > close[i+5]) and close[i+2] > close[i+3] and close[i+3] > close[i+4] and close[i+4] > close[i+5] and close[i] > close[i+1+lookback] and close[i+1] < close[i+lookback]
+        //isBullish := close[i+2] > close[i+3] and close[i+3] > close[i+4] and close[i+4] > close[i+5] and close[i] > close[i+1+lookback] and close[i+1] < close[i+lookback]
+        isBullish := (high [i+5] > low[i+2]) and close[i+2] > close[i+3] and close[i+3] > close[i+4] and close[i+4] > close[i+5] and close[i] > close[i+1+lookback] and close[i+1] < close[i+lookback]
+    else
+        isBullish := close[i] > close[i+1+lookback] and close[i+1] < close[i+lookback]
+
+    [isBullish,i]
+
+// Function to check for Bearish TD Price Flip (AI Generated ??????)
+
+bearishFlip(i,match) =>
+    bool isBearish = true
+    if match
+        //isBearish :=  (open [i+2] < close[i+2])  and (open [i+3] < close[i+3]) and (open [i+4] < close[i+4]) and (open [i+5] < close[i+5]) and close[i+2] < close[i+3] and close[i+3] < close[i+4] and close[i+4] < close[i+5] and close[i] < close[i+lookback] and close[i+1] > close[i+lookback+1]
+        //isBearish :=  close[i+2] < close[i+3] and close[i+3] < close[i+4] and close[i+4] < close[i+5] and close[i] < close[i+lookback] and close[i+1] > close[i+lookback+1]
+        isBearish :=  (high [i+5] < low[i+2])  and close[i+2] < close[i+3] and close[i+3] < close[i+4] and close[i+4] < close[i+5] and close[i] < close[i+lookback] and close[i+1] > close[i+lookback+1]
+    else
+        isBearish := close[i] < close[i+lookback] and close[i+1] > close[i+lookback+1]
+    [isBearish,i]
+
+tdPriceFlip(length = 4, source = close) =>
+    flip = array.new_bool(length)
+    for i = 0 to length - 1
+        if i >= length - 1
+            array.push(flip, source[i] > source[i - length])
+        else
+            array.push(flip, na)
+    flip
+
+// Usage:
+// Bearish TD Price Flip
+//bearishFlip = tdPriceFlip()[0] and not tdPriceFlip()[1]
+
+// Bullish TD Price Flip
+//bullishFlip = not tdPriceFlip()[0] and tdPriceFlip()[1]
+
+// *********************** FIND PATTERN *****************************
+
+match_found = false
+match_dates = array.new_string(forecast_periods)
+match_prices = array.new_float(forecast_periods)
+var match_bar_index = 0
+_found1 = false
+_found2 = false
+var _weak_setup = ""
+var _loop_index = 0
+
+if barstate.islast
+    if not td
+        for t = 0 to kp_iteration
+        //for t = 0 to 0
+            if (match_bar_index == 0)
+                for i = (kp + kp_start) to y - t
+                    match = true
+                    // match t less than oroginal kp
+                    for j = kp_start to (kp - 1 + kp_start) - t
+                        if get_bar_color(i + j) != array.get(last_j_bars, j) 
+                            match := false
+                            break
+                    if kp_trend
+                        for j = kp_start to (kp - 1 + kp_start) - t
+                            if get_bar_direction(i + j) != array.get(last_jud_bars, j) 
+                                match := false
+                                break
+                    else
+                        _weak_setup := "*"
+
+                    if match
+                        match_found := true
+                        match_bar_index := i + kp_start
+                        for m = kp_start to (kp - 1 + kp_start) - t 
+                            array.set(match_dates, m, str.format("{0,date,yyyy-MM-dd}", time[i + m]))
+                            array.set(match_prices, m, close[i + m - kp])
+                        break
+                _loop_index := t
+    else
+        for i = (kp + kp_start) +lookback to y
+            match = true
+            for j = 0 to 0
+            //for j = 1 to (kp - 1 + kp_start)
+                //if get_bar_color(i + j) != array.get(last_j_bars, j)
+                [_res1, _pos1] = bullishFlip(i,true)
+                [_res2, _pos2] = bearishFlip(i,true) 
+                [_res3, _pos3] = bullishFlip(i,false) 
+                [_res4, _pos4] = bearishFlip(i,false)  
+
+
+                //var table myTable = table.new(position = position.bottom_right, columns = 4, rows = 1, bgcolor = color.gray, border_width = 1)
+
+                // Adding headers to the table
+                //table.cell(table_id = myTable, column = 0, row = 0, text = str.tostring(_pos1), bgcolor = color.blue, text_color = color.white)
+                //table.cell(table_id = myTable, column = 1, row = 0, text = str.tostring(_pos2), bgcolor = color.blue, text_color = color.white)
+                //table.cell(table_id = myTable, column = 2, row = 0, text = str.tostring(_pos3), bgcolor = color.blue, text_color = color.white)
+                //table.cell(table_id = myTable, column = 3, row = 0, text = str.tostring(_pos4), bgcolor = color.blue, text_color = color.white)
+
+                if td_trend 
+                    // if it return y (i.e 2000) then there is no match
+                    if not _res1 
+                        match := false
+                        if (_pos1 > (kp - 1 + kp_start) + lookback) and (_pos1 < y)
+                            //found a position
+                            _found1 := true
+                        break
+                    else if not _res2 and not _found1
+                        // bullish pattern not found
+                        match := false
+                        break
+                else
+                    if not _res3 
+                        match := false
+                        if (_pos2 > (kp - 1 + kp_start) + lookback) and (_pos1 < y)
+                            _found2 := true
+                        break
+                    else if not _res4 and not _found2
+                        match := false
+                        break
+            if match
+                match_found := true
+                match_bar_index := i + kp_start
+                for m = kp_start to (kp - 1 + kp_start)
+                    array.set(match_dates, m, str.format("{0,date,yyyy-MM-dd}", time[i + m]))
+                    array.set(match_prices, m, close[i + m - kp])
+                break
+
+// if still no match (majority of case should have match), try without up/down vs previous bar match
+
+if barstate.islast and (match_bar_index == 0) and kp_auto
+    for i = (kp + kp_start) to y
+        match = true
+        for j = kp_start to (kp - 1 + kp_start)
+            if get_bar_color(i + j) != array.get(last_j_bars, j) 
+                match := false
+                break
+
+        if match
+            match_found := true
+            _weak_setup := "*"
+            match_bar_index := i + kp_start
+            for m = kp_start to (kp - 1 + kp_start)
+                array.set(match_dates, m, str.format("{0,date,yyyy-MM-dd}", time[i + m]))
+                array.set(match_prices, m, close[i + m - kp])
+            break
+
+// ******************** DEBUG ********************************
+
+if _debug
+    var debugtable_position = debugdash_loc == 'Top Left' ? position.top_left : debugdash_loc == 'Top Center' ? position.top_center : debugdash_loc == 'Top Right' ? position.top_right : debugdash_loc == 'Mid Left' ? position.middle_left : debugdash_loc == 'Mid Center' ? position.middle_center : debugdash_loc == 'Mid Right' ? position.middle_right : debugdash_loc == 'Bottom Left' ? position.bottom_left: debugdash_loc == 'Bottom Center' ? position.bottom_center : position.bottom_right
+    var debugtable_text_size = debugtext_size == 'Tiny' ? size.tiny : debugtext_size == 'Small' ? size.small : debugtext_size == 'Normal' ? size.normal : size.large
+
+    // Display table
+    if barstate.islast
+        table_id = table.new(debugtable_position, rows=3, columns = array.size(last_j_bars) + 1)
+        table.cell(table_id, 0, 0, "Date {" + str.tostring(match_bar_index) + "}", bgcolor=color.gray, text_color=color.white,text_size=debugtable_text_size)
+        table.cell(table_id, 0, 1, "Candlestick", bgcolor=color.gray, text_color=color.white,text_size=debugtable_text_size)
+        table.cell(table_id, 0, 2, "Pattern", bgcolor=color.gray, text_color=color.white,text_size=debugtable_text_size)
+    
+        for i = 0 to array.size(last_j_bars) -1   
+            table.cell(table_id,i+1 , 0, array.get(last_j_dates, i), text_color=txt_col, text_size=debugtable_text_size)
+            table.cell(table_id,i+1 , 1, array.get(last_j_bars, i), text_color=txt_col, text_size=debugtable_text_size, bgcolor=color.new(array.get(last_j_bars, i) == 'G' ? color.green : color.red, 90))
+            table.cell(table_id,i+1 , 2, array.get(last_jud_bars, i), text_color=txt_col, text_size=debugtable_text_size, bgcolor=color.new(array.get(last_jud_bars, i) == 'U' ? color.rgb(13, 144, 225) : color.rgb(202, 68, 222), 90))
+
+
+
+// Define the lookback periods
+lookbackSetup = 4
+lookbackBonusSetup = 2
+
+// Initialize counters
+var int setupCountF = na
+var int setupCountR = na
+var int bonusCountF = na
+var int bonusCountR = na
+
+// Define the setup and bonus phases
+setupPhaseF = close < close[lookbackSetup]
+setupPhaseR = close > close[lookbackSetup]
+bonusPhaseF = close < close[lookbackBonusSetup]
+bonusPhaseR = close > close[lookbackBonusSetup]
+
+// Increment the setup counter when the setup phase is triggered and price is falling
+if setupPhaseF
+    setupCountF := na(setupCountF) ? 1 : setupCountF + 1
+    setupCountF
+else
+    setupCountF := na
+    setupCountF
+
+// Bonus increment to the bonus counter when the phase is triggered and price is falling
+if setupCountF > 9 and bonusPhaseF
+    bonusCountF := na(bonusCountF) ? 1 : bonusCountF + 1
+    bonusCountF
+else
+    bonusCountF := na
+    bonusCountF
+
+
+
+// Increment the setup counter when setup phase is triggered and price is rising
+if setupPhaseR
+    setupCountR := na(setupCountR) ? 1 : setupCountR + 1
+    setupCountR
+else
+    setupCountR := na
+    setupCountR
+
+// Bonus increment to the bonus counter when the phase is triggered and price is rising
+if setupCountR > 9 and bonusPhaseR
+    bonusCountR := na(bonusCountR) ? 1 : bonusCountR + 1
+    bonusCountR
+else
+    bonusCountR := na
+    bonusCountR
+
+var table_position = dash_loc == 'Top Left' ? position.top_left : dash_loc == 'Bottom Left' ? position.bottom_left : dash_loc == 'Top Right' ? position.top_right : dash_loc == 'Mid Left' ? position.middle_left : dash_loc == 'Mid Right' ? position.middle_right : position.bottom_right
+var table_text_size = text_size == 'Tiny' ? size.tiny : text_size == 'Small' ? size.small : text_size == 'Normal' ? size.normal : size.large
+
+// Create a table to display the forecasted prices and dates
+var table forecast_table = table.new(table_position, 2, forecast_periods + 1, border_width=1, border_color=txt_col,frame_color=txt_col,frame_width=1)
+
+_delta4 = ""
+
+if (open[match_bar_index] - close[match_bar_index]) < 0
+    _delta4 := "g"
+else
+    _delta4 := "r"
+
+
+bar_timestamp = time[match_bar_index]
+
+//Specify the bar index for the vertical line
+barIndex = bar_index[match_bar_index]
+
+//Get the highest and lowest price in the visible chart to span the vertical line
+highestPrice = request.security(syminfo.tickerid, "D", high, lookahead=barmerge.lookahead_on)
+lowestPrice = request.security(syminfo.tickerid, "D", low, lookahead=barmerge.lookahead_on)
+
+if match_bar_index > 0
+    // Draw the vertical line if we are on the last bar (ensures highestPrice and lowestPrice are updated)
+    if (barstate.islast)
+        var lineObj = line.new(na, na, na, na, extend=extend.none)
+        line.delete(lineObj)
+        lineObj := line.new(x1=barIndex, y1=lowestPrice, x2=barIndex, y2=highestPrice, width=2, color=color.rgb(224, 235, 101), style=line.style_solid,extend=extend.both)
+
+
+
+// Calculate the number of bars since the start date
+bars_since_start = bar_index - match_bar_index
+
+_kp_str = "(" + _weak_setup + str.tostring(kp - _loop_index) + ")" 
+
+// Add table headers
+table.cell(forecast_table, 0, 0, 'Price \n' + "["  + str.tostring(setupCountF) + "," + str.tostring(bonusCountF) + "]" +  "\n["  + str.tostring(setupCountR) + "," + str.tostring(bonusCountR) + "]", text_color=txt_col, text_size=table_text_size)
+if match_bar_index > 0
+   
+    table.cell(forecast_table, 1, 0,  array.get(last_j_dates, 0) + "\n==>" + array.get(last_j_dates, kp_start) + "\n" + str.format("{0,date,yyyy-MM-dd}", bar_timestamp) +  "\n" + _kp_str + '[' + str.tostring(match_bar_index) + '] ' + '(' + str.tostring(_delta4) + str.tostring(close[match_bar_index]) + ')', text_color=txt_col, text_size=table_text_size)
+else
+    table.cell(forecast_table, 1, 0,  _kp_str + '[' + str.tostring(match_bar_index) + '] ' + '(' + str.tostring(_delta4) + str.tostring(close[match_bar_index]) + ')', text_color=txt_col, text_size=table_text_size)    
+
+// Populate the table with forecasted prices and dates
+delta1 = 0.0
+delta2 = 0.0
+forecast_price_value1 = ""
+
+if match_bar_index + math.max(lookback,kp+kp_start) < y
+    for i = 1 to forecast_periods by 1
+        //delta2 := close[match_bar_index] 
+        if barstate.islast and match_bar_index > 0
+            //delta2 := close[match_bar_index-i] 
+            if (match_bar_index > lookback)
+                //delta2 := close[match_bar_index-i] - close[match_bar_index-i+1]
+                delta2 := close[match_bar_index-i]
+                forecast_price_value1 := str.tostring(i) + " " + str.tostring("L:" + str.tostring(low[match_bar_index-i]-low[match_bar_index-i-1]+low[1], '#.##') + " H:" + str.tostring(high[match_bar_index-i]-high[match_bar_index-i-1]+high[1], '#.##'))
+            else
+                delta2 := 0
+
+            if (open[match_bar_index-i] - close[match_bar_index-i]) < 0
+                _delta4 := "g"
+            else
+                _delta4 := "r"
+
+        if barstate.islast and match_bar_index > 0
+            if close[match_bar_index-i] > close[match_bar_index-i+1]
+                delta1 := math.abs(high[match_bar_index-i] - low[match_bar_index-i+1])
+            else
+                delta1 := -math.abs(high[match_bar_index-i] - low[match_bar_index-i+1])
+
+            table.cell(forecast_table, 0, i, str.tostring(delta1, '#.##') + ' (' + str.tostring(delta1, '#.##') + ')', text_color=txt_col_price, text_size=table_text_size)
+            table.cell(forecast_table, 1, i, str.tostring(_delta4) + str.tostring(delta2, '#.##') + ' (' + forecast_price_value1 + ')', text_color=txt_col_price_adj, text_size=table_text_size)
+
+
+

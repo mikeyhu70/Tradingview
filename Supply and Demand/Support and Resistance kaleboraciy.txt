@@ -1,0 +1,176 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © kaleboraciy
+
+//@version=4
+study("Support & Ressistance (k)", overlay = true, max_lines_count = 500, max_labels_count = 500)
+
+mode_auto_TF = input(title="Auto Timeframe to Assess ?", defval='Manual', options=['Auto', 'Manual'])
+res = input(title="resolution (if manual)", defval="", type=input.resolution)
+//pivot_len = input(20, title = 'Pivot Points Length', type = input.integer)
+mode_auto_len = input(title="Auto Pivot Length ?", defval='Auto', options=['Auto', 'Manual'])
+_pivot_len = input(20, title = 'Pivot Points Length', type = input.integer)
+//inacc = input(0.5, title = 'Inaccuracy', type = input.float, step = 0.1) / 100 * close
+mode_auto_inacc= input(title="Auto Inaccuracy ?", defval='Auto', options=['Auto', 'Manual'])
+_inacc = input(0.5, title = 'Inaccuracy', type = input.float, step = 0.1) / 100 * close 
+width = input(12, title = 'Linewidth')
+width2 = input(8, title = 'Linewidth of broken line')
+show_broken = input(true, title = 'Сontinue broken lines?')
+start = input(timestamp("2021-01-01"), type = input.time, title = 'Start calculations from')
+
+time_cond = time >= start
+
+auto_tf = timeframe.period == 'M' ? 'Y' : timeframe.period == 'W' ? 'M' : 
+   timeframe.period == 'D' ? '2D' : timeframe.period == '360' ? 'D' : 
+   timeframe.period == '240' ? 'D' : timeframe.period == '195' ? 'D' : 
+   timeframe.period == '120' ? '240' : timeframe.period == '78' ? '120' : 
+   timeframe.period == '60' ? '120' : timeframe.period == '45' ? '120' : 
+   timeframe.period == '39' ? '60' : timeframe.period == '30' ? '60' : 
+   timeframe.period == '20' ? '30' : timeframe.period == '15' ? '30' : timeframe.period == '10' ? '30' : 
+   timeframe.period == '5' ? '15' : timeframe.period == '3' ? '15' : 
+   timeframe.period == '2' ? '15' : timeframe.period == '1' ? '15' : '30'
+   
+_res = mode_auto_TF == 'Auto' ? auto_tf : res
+
+auto_len= timeframe.period == 'M' ? 2 : timeframe.period == 'W' ? 2 : 
+   timeframe.period == 'D' ? 2 : timeframe.period == '360' ? 2 : 
+   timeframe.period == '240' ? 5 : timeframe.period == '195' ? 5 : 
+   timeframe.period == '120' ? 8 : timeframe.period == '78' ? 10 : 
+   timeframe.period == '60' ? 10 : timeframe.period == '45' ? 10 : 
+   timeframe.period == '39' ? 10 : timeframe.period == '30' ? 10 : 
+   timeframe.period == '20' ? 10 : timeframe.period == '15' ? 10 : timeframe.period == '10' ? 10 : 
+   timeframe.period == '5' ? 10  : _pivot_len 
+   
+pivot_len = mode_auto_len == 'Auto' ? auto_len : _pivot_len
+
+auto_inacc= timeframe.period == 'M' ? 4 : timeframe.period == 'W' ? 4 : 
+   timeframe.period == 'D' ? 1 : timeframe.period == '360' ? 1 : 
+   timeframe.period == '240' ? 1.0 : timeframe.period == '195' ? 1.0 : 
+   timeframe.period == '120' ? 0.5 : timeframe.period == '78' ? 0.5 : 
+   timeframe.period == '60' ? 0.5 : timeframe.period == '45' ? 0.5 : 
+   timeframe.period == '39' ? 0.5 : timeframe.period == '30' ? 0.5: 
+   timeframe.period == '20' ? 0.5: timeframe.period == '15' ? 0.5 : timeframe.period == '10' ? 0.5 : 
+   timeframe.period == '5' ? 0.5 : _inacc 
+   
+inacc = mode_auto_inacc == 'Auto' ? auto_inacc/100*close : _inacc
+
+hi = security(syminfo.tickerid, _res, high)
+lo = security(syminfo.tickerid, _res, low)
+
+max_bars_back(hi, 500)
+max_bars_back(lo, 500)
+
+//ph = pivothigh(high, pivot_len, pivot_len) 
+//pl = pivotlow(low, pivot_len, pivot_len)
+
+ph = pivothigh(hi, pivot_len, pivot_len) 
+pl = pivotlow(lo, pivot_len, pivot_len)
+
+
+f_crossing_level_up(sr, r) =>
+    //(r > sr and r < sr[1])
+    (r < sr and r > sr[1])
+    
+f_crossing_level_down(sr, r) =>
+    //(r < sr and r > sr[1])
+    (r > sr and r < sr[1])
+
+
+var lines_upper = array.new_line(1)
+var lines_lower = array.new_line(1)
+
+if array.size(lines_upper) > 500
+    array.shift(lines_upper)
+    
+if array.size(lines_lower) > 500
+    array.shift(lines_lower)
+
+// deleting bad levels
+
+k = 0
+
+for i = 0 to array.size(lines_upper) - 1
+    line_price = line.get_y2(array.get(lines_upper, i - k))
+    if high - inacc > line_price
+        x1 = line.get_x1(array.get(lines_upper, i - k))
+        x2 = line.get_x2(array.get(lines_upper, i - k))
+        
+        
+        y1 = line.get_y1(array.get(lines_upper, i - k))
+        
+        if x1 != x2
+            line.new(x1, y1, bar_index, y1, extend = extend.none, color = color.new(color.green, 60), width = width)
+            line.set_x2(array.get(lines_upper, i - k), bar_index)
+            //alert("Green level at "+ tostring(y1) + " has broken!", freq = alert.freq_once_per_bar)
+            if f_crossing_level_up(close, y1)
+                alert("SR (kaleboraciy): " + syminfo.ticker + " Green level at "+ tostring(y1) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+            else
+                if f_crossing_level_down(close, y1)
+                    alert("SR (kaleboraciy): " + syminfo.ticker + " Green level at "+ tostring(y1) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+            if show_broken
+                line.new(time_close[1], y1, time_close + 1, y1, extend = extend.right, color = color.new(color.aqua, 85), width = width2, xloc = xloc.bar_time)
+            
+        line.delete(array.get(lines_upper, i - k))
+        array.remove(lines_upper, i - k)
+        
+        k := k + 1
+        
+k := 0
+        
+for i = 0 to array.size(lines_lower) - 1
+    line_price = line.get_y2(array.get(lines_lower, i - k))
+    if low + inacc < line_price
+        x1 = line.get_x1(array.get(lines_lower, i - k))
+        x2 = line.get_x2(array.get(lines_lower, i - k))
+        
+        
+        y1 = line.get_y1(array.get(lines_lower, i - k))
+        
+        if x1 != x2
+            line.new(x1, y1, bar_index, y1, extend = extend.none, color = color.new(color.red, 60), width = width)
+            line.set_x2(array.get(lines_lower, i - k), bar_index)
+            //alert("Red level at "+ tostring(y1) + " has broken!", freq = alert.freq_once_per_bar)
+            if f_crossing_level_up(close, y1)
+                alert("SR (kaleboraciy): " + syminfo.ticker + " Red level at "+ tostring(y1) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+            else
+                if f_crossing_level_down(close, y1)
+                    alert("SR (kaleboraciy): " + syminfo.ticker + " Red level at "+ tostring(y1) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+            if show_broken
+                line.new(time_close[1], y1, time_close + 1, y1, extend = extend.right, color = color.new(color.orange, 85), width = width2, xloc = xloc.bar_time)
+            
+        line.delete(array.get(lines_lower, i - k))
+        array.remove(lines_lower, i - k)
+        
+        k := k + 1
+        
+
+    
+if ph and time_cond
+    bool flag = false
+    for i = 0 to array.size(lines_upper) - 1
+        line_price = line.get_y2(array.get(lines_upper, i))
+        if ph >= line_price - inacc and ph <= line_price + inacc
+            flag := true
+            line.set_color(array.get(lines_upper, i), color.new(color.green, 60))
+            line.set_x2(array.get(lines_upper, i), bar_index)
+    if not flag
+        array.push(lines_upper, line.new(bar_index[pivot_len], ph, bar_index[pivot_len], ph, color = na, extend = extend.right, width = width))
+    
+if pl and time_cond
+    bool flag = false
+    for i = 0 to array.size(lines_lower) - 1
+        line_price = line.get_y2(array.get(lines_lower, i))
+        if pl >= line_price - inacc and pl <= line_price + inacc
+            flag := true
+            line.set_color(array.get(lines_lower, i), color.new(color.red, 60))
+            line.set_x2(array.get(lines_lower, i), bar_index)
+    if not flag
+        array.push(lines_lower, line.new(bar_index[pivot_len], pl, bar_index[pivot_len], pl, color = na, extend = extend.right, width = width))
+
+
+
+
+            
+// plot(array.size(lines_upper))
+
+// plot(ph)
+// plot(pl)

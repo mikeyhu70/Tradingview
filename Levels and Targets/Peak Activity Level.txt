@@ -1,0 +1,93 @@
+// This work is licensed under a Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0) https://creativecommons.org/licenses/by-nc-sa/4.0/
+// © LuxAlgo
+
+//@version=4
+study("Peak Activity Levels",overlay=true,max_bars_back=2000,max_lines_count=500,max_boxes_count=500)
+//length   = input(20,minval=1)
+length   = input(14,minval=1)
+//show     = input(5,'Number Of Levels',minval=1)
+show     = input(34,'Number Of Levels',minval=1)
+
+line_col  = input('Fixed','Levels Color Mode',options=['Relative','Random','Fixed'])
+lvl_style = input('──','Levels Style',options=['──','- - -','· · ·'])
+
+relative_col_up = input(#2157f3,'',inline='lvlcol')
+relative_col_dn = input(#ff5d00,'',inline='lvlcol')
+fixed_col       = input(#2157f3,'Fixed Color',inline='lvlcol')
+
+show_hist = input(true,'Show Histogram',group='Histogram')
+//distwin   = input(200,'Histogram Window',maxval=500,group='Histogram')
+distwin   = input(600,'Histogram Window',maxval=2000,group='Histogram')
+upcol     = input(color.new(#2157f3,80),'Bins Colors',group='Histogram',inline='col')
+dncol     = input(color.new(#ff5d00,80),'',group='Histogram',inline='col')
+//----
+var color css = na
+var lines = array.new_line(0)
+var upbox = array.new_box(0)
+var dnbox = array.new_box(0)
+var randcol = array.new_color(0)
+if barstate.isfirst
+    for i = 0 to show-1
+        array.push(lines,line.new(na,na,na,na))
+        array.push(upbox,box.new(na,na,na,na))
+        array.push(dnbox,box.new(na,na,na,na))
+        if line_col == 'Random'
+            array.push(randcol,color.rgb(random(0,255),random(0,255),random(0,255)))
+//----
+os = 0.
+n = bar_index
+src = close
+var y = array.new_float(0)
+//----
+ph = pivothigh(volume,length,length)
+if ph
+    array.unshift(y,src[length])
+//----
+a = 0.
+b = 0.
+if barstate.islast
+    slice = array.slice(y,0,show+1)
+    array.sort(slice)
+    for i = 0 to show-1
+        lvl = array.get(y,i)
+        
+        if line_col =='Relative'
+            css := src > lvl ? relative_col_up : relative_col_dn
+        else if line_col =='Random'
+            css := array.get(randcol,i)
+        else
+            css := fixed_col
+        
+        l = array.get(lines,i)
+        line.set_xy1(l,n,lvl)
+        line.set_xy2(l,n-1,lvl)
+        line.set_extend(l,extend.right)
+        line.set_color(l,css)
+        
+        if lvl_style == '- - -'
+            line.set_style(l,line.style_dashed)
+        else if lvl_style == '· · ·'
+            line.set_style(l,line.style_dotted)
+        
+        up = 1
+        dn = 1
+        if show != 1 and i != 0 and show_hist
+            for j = 0 to distwin-1
+                a := array.get(slice,i)
+                b := array.get(slice,i-1)
+                up := max(a,b) > src[j] and min(a,b) < src[j] and src[j] > open[j] ? up+1 : up
+                dn := max(a,b) > src[j] and min(a,b) < src[j] and src[j] < open[j] ? dn+1 : dn
+            
+            sum = up + dn
+            box_a = array.get(dnbox,i)
+            box_b = array.get(upbox,i)
+            
+            box.set_rightbottom(box_a,n+sum,min(a,b))
+            box.set_lefttop(box_a,n+up,max(a,b))
+            box.set_border_color(box_a,na)
+            box.set_bgcolor(box_a,dncol)
+            
+            box.set_rightbottom(box_b,n+1,max(a,b))
+            box.set_lefttop(box_b,n+up,min(a,b))
+            box.set_border_color(box_b,na)
+            box.set_bgcolor(box_b,upcol) 

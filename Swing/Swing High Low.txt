@@ -1,0 +1,44 @@
+//https://www.tradingview.com/script/5WGjKrEx-Swing-High-Low/
+
+//@version=4
+
+// Author:    @millerrh
+// Purpose:  Plot swing high and low levels.  Helps to visualize horizontal level market structure. Can use for stop levels, etc.
+// User Config: Select whether to show the most recent low as stop level that goes across whole screen 
+ 
+study(title="Swing High/Low", shorttitle="Swing High/Low", overlay=true)
+
+// Inputs
+pvtLenL       = input(3, minval=1, title="Pivot Length Left Hand Side")
+pvtLenR       = input(3, minval=1, title="Pivot Length Right Hand Side")
+showStop      = input(true, title="Show Recent Low Stop?", type=input.bool)
+
+// Get High and Low Pivot Points
+pvthi_ = pivothigh(high, pvtLenL, pvtLenR)
+pvtlo_ = pivotlow(low, pvtLenL, pvtLenR)
+
+// Force Pivot completion before plotting.
+Shunt = 1 //Wait for close before printing pivot? 1 for true 0 for flase
+maxLvlLen = 0 //Maximum Extension Length
+pvthi = pvthi_[Shunt]
+pvtlo = pvtlo_[Shunt]
+
+// Count How many candles for current Pivot Level, If new reset.
+counthi = barssince(not na(pvthi))
+countlo = barssince(not na(pvtlo))
+ 
+pvthis = fixnan(pvthi)
+pvtlos = fixnan(pvtlo)
+hipc = change(pvthis) != 0 ? na : color.maroon
+lopc = change(pvtlos) != 0 ? na : color.green
+
+// Display Pivot lines
+plot((maxLvlLen == 0 or counthi < maxLvlLen) ? pvthis : na, color=hipc, transp=0, linewidth=1, offset=-pvtLenR-Shunt, title="Top Levels")
+plot((maxLvlLen == 0 or countlo < maxLvlLen) ? pvtlos : na, color=lopc, transp=0, linewidth=1, offset=-pvtLenR-Shunt, title="Bottom Levels")
+plot((maxLvlLen == 0 or counthi < maxLvlLen) ? pvthis : na, color=hipc, transp=0, linewidth=1, offset=0, title="Top Levels 2")
+plot((maxLvlLen == 0 or countlo < maxLvlLen) ? pvtlos : na, color=lopc, transp=0, linewidth=1, offset=0, title="Bottom Levels 2")
+
+// Stop Levels
+stopLevel = valuewhen(pvtlo_, low[pvtLenR], 0)
+plotStopLevel = showStop == true ? stopLevel : na
+plot(plotStopLevel, style=plot.style_linebr, color=color.orange, show_last=1, linewidth=2, transp=50, trackprice=true)

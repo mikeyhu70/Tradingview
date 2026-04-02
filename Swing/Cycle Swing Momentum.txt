@@ -1,0 +1,518 @@
+// 
+// Copyright (C) 2017-2020 CC BY, whentotrade / Lars von Thienen
+// Source:
+// Book: Decoding The Hidden Market Rhythm - Part 1: Dynamic Cycles
+// Chapter 10: "Cycle Swing Indicator: Trading the swing of the dominant cycle"
+// 
+// Cycle Swing Indicator (CSI)
+//
+// Features: 
+// adaptive momentum, ultra-smooth, zero-lag, ultra-sharp turning points & accurate divergence detection
+//
+// Includes TradingView Divergence Indicator code
+//
+// License: 
+// This work is licensed under a Creative Commons Attribution 4.0 International License.
+// You are free to share the material in any medium or format and remix, transform, and build upon the material for any purpose, 
+// even commercially. You must give appropriate credit to the authors book and website, provide a link to the license, and indicate 
+// if changes were made. You may do so in any reasonable manner, but not in any way that suggests the licensor endorses you or your use. 
+//
+// © WhenToTrade
+
+//@version=4
+study(title="Cycle Swing Momentum", overlay = false)
+
+//===== Inputs
+showDivergences = input(false, "Enable Divergences", input.bool)
+_cycs = input(title="cycs", type=input.integer, defval=17)
+mode_auto_TF = input(title="Internal Timeframe to Assess ?", defval='Manual', options=['Auto', 'Manual'])
+res = input(title="resolution for internal  (if manual)", defval="", type=input.resolution)
+internal_period = input(title="Signal Period for Internal", type=input.integer, defval=10, minval=2)
+
+auto_tf = timeframe.period == 'M' ? 'D' : timeframe.period == 'W' ? 'D' : 
+   timeframe.period == 'D' ? '240' : timeframe.period == '360' ? '240' : 
+   timeframe.period == '240' ? '120' : timeframe.period == '195' ? '120' : 
+   timeframe.period == '120' ? '60' : timeframe.period == '78' ? '60' : 
+   timeframe.period == '60' ? '30' : timeframe.period == '45' ? '30' : 
+   timeframe.period == '39' ? '15' : timeframe.period == '30' ? '15' : 
+   timeframe.period == '20' ? '10' : timeframe.period == '15' ? '10' : timeframe.period == '10' ? '5' : 
+   timeframe.period == '5' ? '3' : timeframe.period == '3' ? '2' : 
+   timeframe.period == '2' ? '1' : timeframe.period == '1' ? '1' : res
+
+_res = mode_auto_TF == 'Auto' ? auto_tf : res
+
+// -- MA of series of Integer
+
+Sum(src,p) => a = cum(src), a - a[max(p,0)]
+
+Sma(src,p) => a = cum(src), (a - a[max(p,0)])/max(p,0)
+
+Ema(src,p) =>
+    ema = 0.
+    sf = 2/(p+1)
+    ema := nz(ema[1] + sf*(src - ema[1]),src)
+
+Wma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), (mp*a - Sum(a[1],p))/denom
+    
+Hma(src, len) => Wma(2*Wma(src, len/2)-Wma(src, len), round(sqrt(len)))
+
+Lsma(src,p) => 
+    mp = max(p,0)
+    denom = mp*(mp+1)/2
+    a = cum(src), b = (mp*a - Sum(a[1],p))/denom
+    3*b - 2*(a - a[mp])/mp
+
+Variance(src,p) => p == 1 ? 0 : Sma(src*src,p) - pow(Sma(src,p),2)
+
+Stdev(src,p) => p == 1 ? 0 : sqrt(Sma(src*src,p) - pow(Sma(src,p),2)) 
+
+Atr(p) =>
+    atr = 0.
+    Tr = max(high,close[1]) - min(low,close[1])
+    atr := nz(atr[1] + (Tr - atr[1])/p,Tr)
+
+Covariance(x,y,p) => Sma(x*y,p) - Sma(x,p)*Sma(y,p)
+
+Correlation(x,y,p) => Covariance(x,y,p)/(Stdev(x,p)*Stdev(y,p))
+
+// -- Custom MA 
+
+nma(src, length1, length2) =>
+    lambda = length1 / length2
+    alpha = lambda * (length1 - 1) / (length1 - lambda)
+    ma1 = Ema(src, length1)
+    ma2 = Ema(ma1, length2)
+    nma = (1 + alpha) * ma1 - alpha * ma2
+    
+dema(src, len) => 
+    ma1 = Ema(src, len)
+    ma2 = Ema(ma1, len)
+    2 * ma1 - ma2
+    
+eTma(_src, _len) =>
+    _tma = Ema(Ema(_src, _len), _len)
+    
+tma(_src, _len) =>
+  _tma = Sma(Sma(_src, _len), _len)
+    
+noma(_src,_len) =>
+    _noma = _src
+
+tema(src, len) => 
+    ma1 = Ema(src, len)
+    ma2 = Ema(ma1, len)
+    ma3 = Ema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tdema(src, len) => 
+    ma1 = dema(src, len)
+    ma2 = dema(ma1, len)
+    ma3 = dema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+ttema(src, len) => 
+    ma1 = tema(src, len)
+    ma2 = tema(ma1, len)
+    ma3 = tema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+
+tnma(src, len) => 
+    ma1 = nma(src, len, 3)
+    ma2 = nma(ma1, len, 3)
+    ma3 = nma(ma2, len, 3)
+    //4 * (ma1 - ma3) + ma3
+    3 * (ma1 - ma3) + ma3
+
+thma(src, len) => 
+    ma1 = Hma(src, len)
+    ma2 = Hma(ma1, len)
+    ma3 = Hma(ma2, len)
+    3 * (ma1 - ma2) + ma3
+    
+zlema(src, len) =>
+    lag = round((len - 1) / 2)
+    zlsrc = src + (src - src[lag])
+    Ema(zlsrc, len)
+
+zldema(src, len) =>
+    lag = round((len - 1) / 2)
+    zlsrc = src + (src - src[lag])
+    dema(zlsrc, len)
+    
+zltema(src, len) =>
+    lag = round((len - 1) / 2)
+    zlsrc = src + (src - src[lag])
+    tema(zlsrc, len)
+    
+dzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    2 * ma1 - ma2
+
+tzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    3 * (ma1 - ma2) + ma3
+    
+//qzlema(src, len) => 
+//    ma1 = zlema(src, len)
+//    ma2 = zlema(ma1, len)
+//    ma3 = zlema(ma2, len)
+//    ma4 = zlema(ma3, len)
+//    3 * (ma2 - ma3) + ma4
+    
+qzlema(src, len) => 
+    ma1 = zlema(src, len)
+    ma2 = zlema(ma1, len)
+    ma3 = zlema(ma2, len)
+    ma4 = zlema(ma3, len)
+    2 * (ma1 - ma2) + 2 * (ma2 - ma3) + ma4
+
+llema(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Ema(srcnew, len)
+    
+llsma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Sma(srcnew, len)
+    
+llhma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Hma(srcnew, len)
+    
+llwma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    Wma(srcnew, len)
+    
+llrma(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    rma(srcnew, len)
+    
+lltema(src, len) =>
+    srcnew = 0.25*src + 0.5*src[1] + 0.25*src[2]
+    tema(srcnew, len)
+
+_tick_o = security('USI:TICK.US', _res, open, barmerge.gaps_on, barmerge.lookahead_off)
+_tick_c = security('USI:TICK.US', _res, close, barmerge.gaps_on, barmerge.lookahead_off)
+_tick_h = security('USI:TICK.US', _res, high, barmerge.gaps_on, barmerge.lookahead_off)
+_tick_l = security('USI:TICK.US', _res, low, barmerge.gaps_on, barmerge.lookahead_off)
+_tick_s = zlema(_tick_c,internal_period)
+
+_add_o = security('USI:ADD', _res, open, barmerge.gaps_on, barmerge.lookahead_off)
+_add_c = security('USI:ADD', _res, close, barmerge.gaps_on, barmerge.lookahead_off)
+_add_h = security('USI:ADD', _res, high, barmerge.gaps_on, barmerge.lookahead_off)
+_add_l = security('USI:ADD', _res, low, barmerge.gaps_on, barmerge.lookahead_off)
+_add_s = zlema(_add_c,internal_period)
+
+//_addsp_o = security('USI:ADVDEC.US', _res, open, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_c = security('USI:ADVDEC.US', _res, close, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_h = security('USI:ADVDEC.US', _res, high, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_l = security('USI:ADVDEC.US', _res, low, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_s = zlema(_addsp_c,internal_period)
+
+_addsp_o = security('USI:UVOL/(USI:UVOL+USI:DVOL)*100', _res, open, barmerge.gaps_on, barmerge.lookahead_off)
+_addsp_c = security('USI:UVOL/(USI:UVOL+USI:DVOL)*100', _res, close, barmerge.gaps_on, barmerge.lookahead_off)
+_addsp_h = security('USI:UVOL/(USI:UVOL+USI:DVOL)*100', _res, high, barmerge.gaps_on, barmerge.lookahead_off)
+_addsp_l = security('USI:UVOL/(USI:UVOL+USI:DVOL)*100', _res, low, barmerge.gaps_on, barmerge.lookahead_off)
+_addsp_dv = security('USI:UVOL-USI:DVOL', _res, close, barmerge.gaps_on, barmerge.lookahead_off)
+_addsp_s = zlema(_addsp_c,internal_period)
+
+//_addsp_o = security('USI:TRIN.US', _res, open, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_c = security('USI:TRIN.US', _res, close, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_h = security('USI:TRIN.US', _res, high, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_l = security('USI:TRIN.US', _res, low, barmerge.gaps_on, barmerge.lookahead_off)
+//_addsp_s = zlema(_addsp_c,internal_period)
+
+Cycle1(i, waveThrottle, cycs) =>
+    ret = 6.0*waveThrottle+1.0
+    
+    if (i==0) 
+        ret := 1.0+waveThrottle
+    else if (i==1) 
+        ret := 1.0+waveThrottle*5.0
+    else if (i==(cycs-1)) 
+        ret := 1.0+waveThrottle
+    else if (i==(cycs-2)) 
+        ret := 1.0+waveThrottle*5.0
+   
+    ret
+
+
+Cycle2(i, waveThrottle, cycs) =>
+    ret = -4.0*waveThrottle 
+    if (i==0) 
+        ret := -2.0*waveThrottle
+    else if (i==(cycs-1)) 
+        ret := 0.0
+    else if (i==(cycs-2)) 
+        ret := -2.0*waveThrottle
+   
+    ret
+
+Cycle3(i, waveThrottle, cycs) =>
+    ret = waveThrottle
+    
+    if (i==(cycs-1)) 
+        ret := 0.0
+    else if (i==(cycs-2)) 
+        ret := 0.0
+   
+    ret
+
+iWTT_CSI_processor(CycleCount) =>
+    wtt1=0.0
+    wtt2=0.0
+    wtt3=0.0
+    wtt4=0.0
+    wtt5=0.0
+    _wtt1=0.0
+    _wtt2=0.0
+    _wtt3=0.0
+    _wtt4=0.0
+    _wtt5=0.0
+    momentum=0.0
+    acceleration=0.0
+    swing=0.0
+    cycs=_cycs
+    waveThrottle=float(160*CycleCount)
+    currentVal=0.0  
+    
+    for i = 0 to cycs - 1 by 1
+        swing:=Cycle1(i,waveThrottle,cycs)-wtt4*wtt1-_wtt5*_wtt2
+        if(swing==0) 
+            break
+        momentum := Cycle2(i,waveThrottle,cycs)
+        _wtt1 := wtt1
+        wtt1 := (momentum-wtt4*wtt2)/swing
+
+        acceleration:=Cycle3(i,waveThrottle,cycs)
+        _wtt2 := wtt2
+        wtt2 := acceleration/swing
+ 
+        currentVal:=(close[_cycs-1-i]-_wtt3*_wtt5-wtt3*wtt4)/swing
+        _wtt3  := wtt3
+        wtt3   := currentVal
+        wtt4   := momentum-wtt5*_wtt1
+        _wtt5  := wtt5
+        wtt5   := acceleration
+
+    currentVal
+
+banding(CRSI, Period, Leveling) =>
+    var percent = Leveling / 100.0
+    periodMinusOne = Period-1
+    maxima = -999999.0
+    minima =  999999.0
+    for i=0 to periodMinusOne
+        crsi = nz(CRSI[i])
+        if      crsi > maxima
+            maxima := crsi
+        else if crsi < minima
+            minima := crsi
+    stepFactor = (maxima - minima) / 100.0
+    float lowBand = na
+    for steps=0 to 100
+        testValue = minima + stepFactor * steps
+        below = 0
+        for m=0 to periodMinusOne
+            if CRSI[m] < testValue
+                below := below + 1
+        if below/Period >= percent
+            lowBand := testValue
+            break
+    float highBand = na
+    for steps=0 to 100
+        testValue = maxima - stepFactor * steps
+        above = 0
+        for m=0 to periodMinusOne
+            if CRSI[m] >= testValue
+                above := above + 1
+        if above/Period >= percent
+            highBand := testValue
+            break
+    [highBand, lowBand]
+
+
+//==== Vars
+//var leveling  = 10
+//var cyclicMemory = 34
+
+_leveling = input(title="leveling", type=input.integer, defval=5)
+_cyclicMemory = input(title="cyclicMemory", type=input.integer, defval=20)
+
+var leveling  = _leveling
+var cyclicMemory = _cyclicMemory
+
+//===== Calculations
+//thrust1=iWTT_CSI_processor(1)
+//thrust2=iWTT_CSI_processor(10)
+
+_iWTT_CSI_processor1= input(title="iWTT_CSI_processor1", type=input.integer, defval=1)
+_iWTT_CSI_processor2= input(title="iWTT_CSI_processor2", type=input.integer, defval=2)
+
+thrust1=iWTT_CSI_processor(_iWTT_CSI_processor1)
+thrust2=iWTT_CSI_processor(_iWTT_CSI_processor2)
+      
+CSIBuffer = thrust1-thrust2
+
+[highBand, lowBand] = banding( CSIBuffer, cyclicMemory,  leveling)
+
+highband = plot(highBand, "HighBand", color=color.aqua , editable=false)
+lowband  = plot( lowBand,  "LowBand", color=color.aqua, editable=false)
+fill( highband,  lowband, transp=92 , color=#CCCC77   )
+
+color_add = _add_c > 0 ? color.lime: color.yellow
+color_addsp = _addsp_dv > 0 ? color.lime: color.purple
+
+plot ( _add_c > _add_o and _add_c[0] != _add_c[1] and (_add_c > 0 or _add_c > _add_s) ? highBand: na, linewidth=2, title="ADD > 0", style=plot.style_circles, color=color_add)
+plot ( _add_c > _add_o and _add_c[0] != _add_c[1] and (_add_c < 0 or _add_c < _add_s)  ? highBand: na, linewidth=2, title="ADD < 0", style=plot.style_cross, color=color_add)
+
+plot ( _addsp_c > _addsp_o and _addsp_c[0] != _addsp_c[1] and (_addsp_c > 0 or _addsp_c > _add_s) ? lowBand: na, linewidth=2, title="ADDSP > 0", style=plot.style_circles, color=color_addsp)
+plot ( _addsp_c > _addsp_o and _addsp_c[0] != _addsp_c[1] and (_addsp_c < 0 or _addsp_c < _add_s)  ? lowBand: na, linewidth=2, title="ADDSP < 0", style=plot.style_cross, color=color_addsp)
+
+
+plot(0, color=color.silver, linewidth=1, transp=25)
+
+color_tick = _tick_c > 0 ? color.blue : color.orange
+
+//plot (_tick_c, title="debug")
+
+plot(CSIBuffer, color=color.fuchsia, linewidth=2)
+plot ( _tick_c > _tick_o and _tick_c[0] != _tick_c[1] and (_tick_c > 0 or _tick_c > _tick_s) ? CSIBuffer: na, linewidth=3, title="TICK > 0", style=plot.style_circles, color=color_tick)
+plot ( _tick_c > _tick_o and _tick_c[0] != _tick_c[1] and (_tick_c < 0 or _tick_c < _tick_s)  ? CSIBuffer: na, linewidth=2, title="TICK < 0 ", style=plot.style_cross, color=color_tick)
+
+
+// ===== Divergence Section
+
+
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Divergence Indicator uSING crsi
+//------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+lbR = input(title="Pivot Lookback Right", defval=5) // 5
+lbL = input(title="Pivot Lookback Left", defval=25) // 25
+rangeUpper = input(title="Max of Lookback Range", defval=80) // 80
+rangeLower = input(title="Min of Lookback Range", defval=10) // 10
+
+plotBull = input(title="Plot Bullish", defval=true)
+plotHiddenBull = input(title="Plot Hidden Bullish", defval=true)
+plotBear = input(title="Plot Bearish", defval=true)
+plotHiddenBear = input(title="Plot Hidden Bearish", defval=true)
+
+bearColor = color.red
+bullColor = color.green
+divergenceSmartColor = color.silver
+
+hiddenBullColor = color.new(color.green, 50) // make transparent
+hiddenBearColor = color.new(color.red, 50) // make transparent
+textColor = color.white
+noneColor = color.new(color.white, 100)
+
+osc = CSIBuffer
+
+plFound = na(pivotlow(osc, lbL, lbR)) ? false : true
+phFound = na(pivothigh(osc, lbL, lbR)) ? false : true
+
+_inRange(cond) =>
+	bars = barssince(cond == true)
+	rangeLower <= bars and bars <= rangeUpper
+	
+	
+
+//------------------------------------------------------------------------------
+// Regular Bullish
+// Osc: Higher Low
+oscHL = osc[lbR] > valuewhen(plFound, osc[lbR], 1) and _inRange(plFound[1])
+
+// Price: Lower Low
+
+priceLL = low[lbR] < valuewhen(plFound, low[lbR], 1)
+bullCond = showDivergences and plotBull and priceLL and oscHL and plFound
+
+plot(
+     showDivergences and plFound and showDivergences ? osc[lbR] : na,
+     offset=-lbR,
+     title="Regular Bullish",
+     linewidth=1,
+     color=(bullCond ? divergenceSmartColor : noneColor),
+     transp=0
+     )
+
+plotshape(bullCond ? osc[lbR] : na,"Bullish Circle",shape.circle,location.absolute,bullColor,0,offset=-lbR,size=size.tiny)
+
+
+//------------------------------------------------------------------------------
+// Hidden Bullish
+// Osc: Lower Low
+
+oscLL = osc[lbR] < valuewhen(plFound, osc[lbR], 1) and _inRange(plFound[1])
+
+// Price: Higher Low
+
+priceHL = low[lbR] > valuewhen(plFound, low[lbR], 1)
+hiddenBullCond = showDivergences and plotHiddenBull and priceHL and oscLL and plFound
+
+plot(
+	 showDivergences and plFound ? osc[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bullish",
+	 linewidth=1,
+	 color=(hiddenBullCond ? divergenceSmartColor : noneColor),
+	 transp=0
+	 )
+
+plotshape(hiddenBullCond ? osc[lbR] : na,"Hidden Bullish Circle",shape.circle,location.absolute,hiddenBullColor,0,offset=-lbR,size=size.tiny)
+
+
+//------------------------------------------------------------------------------
+// Regular Bearish
+// Osc: Lower High
+
+oscLH = osc[lbR] < valuewhen(phFound, osc[lbR], 1) and _inRange(phFound[1])
+
+// Price: Higher High
+
+priceHH = high[lbR] > valuewhen(phFound, high[lbR], 1)
+
+bearCond = showDivergences and plotBear and priceHH and oscLH and phFound
+
+plot(
+	 showDivergences and phFound ? osc[lbR] : na,
+	 offset=-lbR,
+	 title="Regular Bearish",
+	 linewidth=1,
+	 color=(bearCond ? divergenceSmartColor : noneColor),
+	 transp=0
+	 )
+
+plotshape(bearCond ? osc[lbR] : na,"Bearish Circle",shape.circle,location.absolute,bearColor,0,offset=-lbR,size=size.tiny)
+
+
+//------------------------------------------------------------------------------
+// Hidden Bearish
+// Osc: Higher High
+
+oscHH = osc[lbR] > valuewhen(phFound, osc[lbR], 1) and _inRange(phFound[1])
+
+// Price: Lower High
+
+priceLH = high[lbR] < valuewhen(phFound, high[lbR], 1)
+
+hiddenBearCond = showDivergences and plotHiddenBear and priceLH and oscHH and phFound
+
+plot(
+	 showDivergences and phFound ? osc[lbR] : na,
+	 offset=-lbR,
+	 title="Hidden Bearish",
+	 linewidth=2,
+	 color=(hiddenBearCond ? divergenceSmartColor : noneColor),
+	 transp=0
+	 )
+
+plotshape(hiddenBearCond ? osc[lbR] : na,"Hidden Bearish Circle",shape.circle,location.absolute,hiddenBearColor,0,offset=-lbR,size=size.tiny)
+

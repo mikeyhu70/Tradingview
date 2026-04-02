@@ -1,0 +1,459 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © LonesomeTheBlue
+
+//@version=4
+study("Rakesh Level", overlay = true, max_lines_count = 500, max_labels_count=500)
+showlabels = input(title = "Show Labels and Activate Alerts", defval = true)
+symsel = input(title = "Symbol?", options = ['ES', 'NQ'], defval ='ES')
+pback = input(120, 'Number of Plot Back', minval=1, type=input.integer)
+TFp= input("60", title = "Plot Timeframe", type=input.resolution)
+color c_up = input(#FBCCE7, "Color UP", type = input.color)
+color c_down = input(#8A795D, "Color DOWN", type = input.color)
+
+//spextend= input(15, 'Number bar to extend pivot to the right', minval=1, type=input.integer)
+sextend0 = input(18, 'Number bar to extend UP 1 to the right', minval=1, type=input.integer)
+sextend1 = input(18, 'Number bar to extend UP 2 to the right', minval=1, type=input.integer)
+sextend2 = input(18, 'Number bar to extend UP 3 to the right', minval=1, type=input.integer)
+sextend3 = input(18, 'Number bar to extend UP 4 to the right', minval=1, type=input.integer)
+sextend4 = input(18, 'Number bar to extend UP 5 to the right', minval=1, type=input.integer)
+sextend5 = input(18, 'Number bar to extend UP 6 to the right', minval=1, type=input.integer)
+sextend6 = input(18, 'Number bar to extend UP 7 to the right', minval=1, type=input.integer)
+sextend7 = input(18, 'Number bar to extend UP 8 to the right', minval=1, type=input.integer)
+sextend8 = input(18, 'Number bar to extend UP 9 to the right', minval=1, type=input.integer)
+sextend9 = input(18, 'Number bar to extend UP 10 to the right', minval=1, type=input.integer)
+sextend10 = input(18, 'Number bar to extend DOWN 1 to the right', minval=1, type=input.integer)
+sextend11 = input(18, 'Number bar to extend DOWN 2 to the right', minval=1, type=input.integer)
+sextend12 = input(18, 'Number bar to extend DOWN 3 to the right', minval=1, type=input.integer)
+sextend13 = input(18, 'Number bar to extend DOWN 4 to the right', minval=1, type=input.integer)
+sextend14 = input(18, 'Number bar to extend DOWN 5 to the right', minval=1, type=input.integer)
+sextend15 = input(18, 'Number bar to extend DOWN 6 to the right', minval=1, type=input.integer)
+sextend16 = input(18, 'Number bar to extend DOWN 7 to the right', minval=1, type=input.integer)
+sextend17 = input(18, 'Number bar to extend DOWN 8 to the right', minval=1, type=input.integer)
+sextend18 = input(18, 'Number bar to extend DOWN 9 to the right', minval=1, type=input.integer)
+sextend19 = input(18, 'Number bar to extend DOWN 10 to the right', minval=1, type=input.integer)
+
+fib0_1 = input(title="Sellers UP Level 1", type=input.float, defval=4630.00, group = "ES")
+fib1_1 = input(title="Sellers UP Level 2", type=input.float, defval=4620.00, group = "ES")
+fib2_1 = input(title="Sellers UP Level 3", type=input.float, defval=4599.00, group = "ES")
+fib3_1 = input(title="Sellers UP Level 4", type=input.float, defval=4590.00, group = "ES")
+fib4_1 = input(title="Sellers UP Level 5", type=input.float, defval=4578.50, group = "ES")
+fib5_1 = input(title="Sellers UP Level 6", type=input.float, defval=4559.50, group = "ES")
+fib6_1 = input(title="Sellers UP Level 7", type=input.float, defval=4555.50, group = "ES")
+fib7_1 = input(title="Sellers UP Level 8", type=input.float, defval=4545.25, group = "ES")
+fib8_1 = input(title="Sellers UP Level 9", type=input.float, defval=4532.50, group = "ES")
+fib9_1 = input(title="Sellers UP Level 10", type=input.float, defval=4529.00, group = "ES")
+
+fib10_1 = input(title="Buyers DOWN Level 1", type=input.float, defval=4522.00, group = "ES")
+fib11_1 = input(title="Buyers DOWN Level 2", type=input.float, defval=4514.50, group = "ES")
+fib12_1 = input(title="Buyers DOWN Level 3", type=input.float, defval=4507.25, group = "ES")
+fib13_1 = input(title="Buyers DOWN Level 4", type=input.float, defval=4500.00, group = "ES")
+fib14_1 = input(title="Buyers DOWN Level 5", type=input.float, defval=4487.25, group = "ES")
+fib15_1 = input(title="Buyers DOWN Level 6", type=input.float, defval=4481.25, group = "ES")
+fib16_1 = input(title="Buyers DOWN Level 7", type=input.float, defval=4476.00, group = "ES")
+fib17_1 = input(title="Buyers DOWN Level 8", type=input.float, defval=4470.25, group = "ES")
+fib18_1 = input(title="Buyers DOWN Level 9", type=input.float, defval=0, group = "ES")
+fib19_1 = input(title="Buyers DOWN Level 10", type=input.float, defval=0, group = "ES")
+
+fib0_2 = input(title="Sellers UP Level 1", type=input.float, defval=15786, group = "NQ")
+fib1_2 = input(title="Sellers UP Level 2", type=input.float, defval=15780, group = "NQ")
+fib2_2 = input(title="Sellers UP Level 3", type=input.float, defval=15732, group = "NQ")
+fib3_2 = input(title="Sellers UP Level 4", type=input.float, defval=15700, group = "NQ")
+fib4_2 = input(title="Sellers UP Level 5", type=input.float, defval=15660, group = "NQ")
+fib5_2 = input(title="Sellers UP Level 6", type=input.float, defval=15635, group = "NQ")
+fib6_2 = input(title="Sellers UP Level 7", type=input.float, defval=15620, group = "NQ")
+fib7_2 = input(title="Sellers UP Level 8", type=input.float, defval=15592, group = "NQ")
+fib8_2 = input(title="Sellers UP Level 9", type=input.float, defval=15564, group = "NQ")
+fib9_2 = input(title="Sellers UP Level 10", type=input.float, defval=15517, group = "NQ")
+
+fib10_2 = input(title="Buyers DOWN Level 1", type=input.float, defval=15484, group = "NQ")
+fib11_2 = input(title="Buyers DOWN Level 2", type=input.float, defval=15415, group = "NQ")
+fib12_2 = input(title="Buyers DOWN Level 3", type=input.float, defval=15385, group = "NQ")
+fib13_2 = input(title="Buyers DOWN Level 4", type=input.float, defval=15295, group = "NQ")
+fib14_2 = input(title="Buyers DOWN Level 5", type=input.float, defval=15269, group = "NQ")
+fib15_2 = input(title="Buyers DOWN Level 6", type=input.float, defval=15231, group = "NQ")
+fib16_2 = input(title="Buyers DOWN Level 7", type=input.float, defval=15181, group = "NQ")
+fib17_2 = input(title="Buyers DOWN Level 8", type=input.float, defval=15151, group = "NQ")
+fib18_2 = input(title="Buyers DOWN Level 9", type=input.float, defval=15110, group = "NQ")
+fib19_2 = input(title="Buyers DOWN Level 10", type=input.float, defval=15084, group = "NQ")
+
+
+
+ 
+
+// Function returns 1 when starting with first bar of the day 
+firstbar(resolution) =>
+    ch = 0
+    if(resolution == 'Y')
+        t  = year(time('D'))
+        ch := change(t) != 0 ? 1 : 0
+    else
+        t = time(resolution)
+        ch := change(t) != 0 ? 1 : 0
+    ch
+
+// Rounding levels to min tick
+nround(x) => 
+    n = round(x / syminfo.mintick) * syminfo.mintick
+
+previous_values = false
+display_value       = true
+
+// We will be using previous day Open/Close/High/Low values.
+//Hence using Day - D resolution 
+//pp_res = 'D'
+pp_res = TFp
+
+bars_sinse = 0
+bars_sinse := firstbar(pp_res) ? 0 : bars_sinse[1] + 1
+
+t = time("1440", session.extended)  // 1440=60*24 is the number of minutes in a whole day. You may use "0930-1600" as second session parameter
+is_first = na(t[1]) and not na(t) or t[1] < t
+
+
+s0 = 0.0
+s1 = 0.0
+s2 = 0.0
+s3 = 0.0
+s4 = 0.0
+s5 = 0.0
+s6 = 0.0
+s7 = 0.0
+s8 = 0.0
+s9 = 0.0
+
+r0 = 0.0
+r1 = 0.0
+r2 = 0.0
+r3 = 0.0
+r4 = 0.0
+r5 = 0.0
+r6 = 0.0
+r7 = 0.0
+r8 = 0.0
+r9 = 0.0
+
+if symsel == "ES"
+    r0 := fib0_1
+    r1 := fib1_1
+    r2 := fib2_1
+    r3 := fib3_1
+    r4 := fib4_1
+    r5 := fib5_1
+    r6 := fib6_1
+    r7 := fib7_1
+    r8 := fib8_1
+    r9 := fib9_1
+    s0 := fib10_1
+    s1 := fib11_1
+    s2 := fib12_1
+    s3 := fib13_1
+    s4 := fib14_1
+    s5 := fib15_1
+    s6 := fib16_1
+    s7 := fib17_1
+    s8 := fib18_1
+    s9 := fib19_1
+else if symsel == "NQ"
+    r0 := fib0_2
+    r1 := fib1_2
+    r2 := fib2_2
+    r3 := fib3_2
+    r4 := fib4_2
+    r5 := fib5_2
+    r6 := fib6_2
+    r7 := fib7_2
+    r8 := fib8_2
+    r9 := fib9_2
+    s0 := fib10_2
+    s1 := fib11_2
+    s2 := fib12_2
+    s3 := fib13_2
+    s4 := fib14_2
+    s5 := fib15_2
+    s6 := fib16_2
+    s7 := fib17_2
+    s8 := fib18_2
+    s9 := fib19_2
+
+
+//vs1_p = line.new(bar_index[min(bars_sinse+pback,300)], fib7 bar_index+spextend, fib7 color=color.blue,   style =  line.style_dotted, extend = extend.none)
+
+vs1_r0 = line.new(bar_index[min(bars_sinse+pback, 300)], r0, bar_index+sextend0, r0, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r1 = line.new(bar_index[min(bars_sinse+pback, 300)], r1, bar_index+sextend1, r1, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r2 = line.new(bar_index[min(bars_sinse+pback, 300)], r2, bar_index+sextend2, r2, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r3 = line.new(bar_index[min(bars_sinse+pback, 300)], r3, bar_index+sextend3, r3, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r4 = line.new(bar_index[min(bars_sinse+pback, 300)], r4, bar_index+sextend4, r4, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r5 = line.new(bar_index[min(bars_sinse+pback, 300)], r5, bar_index+sextend5, r5, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r6 = line.new(bar_index[min(bars_sinse+pback, 300)], r6, bar_index+sextend6, r6, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r7 = line.new(bar_index[min(bars_sinse+pback, 300)], r7, bar_index+sextend7, r7, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r8 = line.new(bar_index[min(bars_sinse+pback, 300)], r8, bar_index+sextend8, r8, color=c_up,   style =  line.style_dotted, extend = extend.none)
+vs1_r9 = line.new(bar_index[min(bars_sinse+pback, 300)], r9, bar_index+sextend9, r9, color=c_up,   style =  line.style_dotted, extend = extend.none)
+
+
+vs1_s0 = line.new(bar_index[min(bars_sinse+pback, 300)], s0, bar_index+sextend10, s0, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s1 = line.new(bar_index[min(bars_sinse+pback, 300)], s1, bar_index+sextend11, s1, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s2 = line.new(bar_index[min(bars_sinse+pback, 300)], s2, bar_index+sextend12, s2, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s3 = line.new(bar_index[min(bars_sinse+pback, 300)], s3, bar_index+sextend13, s3, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s4 = line.new(bar_index[min(bars_sinse+pback, 300)], s4, bar_index+sextend14, s4, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s5 = line.new(bar_index[min(bars_sinse+pback, 300)], s5, bar_index+sextend15, s5, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s6 = line.new(bar_index[min(bars_sinse+pback, 300)], s6, bar_index+sextend16, s6, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s7 = line.new(bar_index[min(bars_sinse+pback, 300)], s7, bar_index+sextend17, s7, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s8 = line.new(bar_index[min(bars_sinse+pback, 300)], s8, bar_index+sextend18, s8, color=c_down,   style =  line.style_dotted, extend = extend.none)
+vs1_s9 = line.new(bar_index[min(bars_sinse+pback, 300)], s9, bar_index+sextend19, s9, color=c_down,   style =  line.style_dotted, extend = extend.none)
+
+
+
+//line.set_width(vs1_p, 2)
+
+line.set_width(vs1_r0, 1)
+line.set_width(vs1_r1, 1)
+line.set_width(vs1_r2, 1)
+line.set_width(vs1_r3, 1)
+line.set_width(vs1_r4, 1)
+line.set_width(vs1_r5, 1)
+line.set_width(vs1_r6, 1)
+line.set_width(vs1_r7, 1)
+line.set_width(vs1_r8, 1)
+line.set_width(vs1_r9, 1)
+
+
+line.set_width(vs1_s0, 1)
+line.set_width(vs1_s1, 1)
+line.set_width(vs1_s2, 1)
+line.set_width(vs1_s3, 1)
+line.set_width(vs1_s4, 1)
+line.set_width(vs1_s5, 1)
+line.set_width(vs1_s6, 1)
+line.set_width(vs1_s7, 1)
+line.set_width(vs1_s8, 1)
+line.set_width(vs1_s9, 1)
+
+
+
+if (not firstbar(pp_res) or not previous_values)
+    line.delete(vs1_r0[1]) 
+    line.delete(vs1_r1[1]) 
+    line.delete(vs1_r2[1]) 
+    line.delete(vs1_r3[1]) 
+    line.delete(vs1_r4[1]) 
+    line.delete(vs1_r5[1]) 
+    line.delete(vs1_r6[1]) 
+    line.delete(vs1_r7[1]) 
+    line.delete(vs1_r8[1]) 
+    line.delete(vs1_r9[1]) 
+
+    
+if (not firstbar(pp_res) or not previous_values)
+    line.delete(vs1_s0[1]) 
+    line.delete(vs1_s1[1]) 
+    line.delete(vs1_s2[1]) 
+    line.delete(vs1_s3[1]) 
+    line.delete(vs1_s4[1]) 
+    line.delete(vs1_s5[1]) 
+    line.delete(vs1_s6[1]) 
+    line.delete(vs1_s7[1]) 
+    line.delete(vs1_s8[1]) 
+    line.delete(vs1_s9[1]) 
+
+    
+//if (not firstbar(pp_res) or not previous_values)
+//    line.delete(vs1_p[1]) 
+
+// Label for S/R
+chper = time - time[1]
+chper := change(chper) > 0 ? chper[1] : chper
+
+Round_it(valu)=>
+    a = 0
+    num = syminfo.mintick
+    s = valu
+    if na(s)
+        s := syminfo.mintick
+    if num < 1
+        for i = 1 to 20
+            num := num * 10
+            if num > 1
+                break
+            a := a +1
+    
+    for x = 1 to a 
+        s := s * 10
+    s := round(s)
+    for x = 1 to a
+        s := s / 10
+    s := s < syminfo.mintick  ? syminfo.mintick : s
+    s
+
+
+f_crossing_level_up(sr, r) =>
+    //(r > sr and r < sr[1])
+    (r < sr and r > sr[1])
+    
+f_crossing_level_down(sr, r) =>
+    //(r < sr and r > sr[1])
+    (r > sr and r < sr[1])
+
+
+/// Labels and Alerts
+if showlabels
+
+    var label s0label = na, var label s1label = na, var label s2label = na, var label s3label = na, var label s4label = na, var label s5label = na, var label s6label = na, var label s7label = na
+    var label s8label = na, var label s9label = na
+
+    var label r0label = na, var label r1label = na, var label r2label = na, var label r3label = na, var label r4label = na, var label r5label = na, var label r6label = na, var label r7label = na
+    var label r8label = na, var label r9label = na
+
+    
+    label.delete(s0label), label.delete(s1label), label.delete(s2label), label.delete(s3label), label.delete(s4label), label.delete(s5label), label.delete(s6label), label.delete(s7label)
+    label.delete(s8label), label.delete(s9label)
+
+    label.delete(r0label), label.delete(r1label), label.delete(r2label), label.delete(r3label), label.delete(r4label), label.delete(r5label), label.delete(r6label), label.delete(r7label)
+    label.delete(r8label), label.delete(r9label)
+    
+
+    
+    s0label := label.new(x = time - chper * pback, y = s0, text = tostring(Round_it(s0)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s0)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s0) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s0)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s0) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s1label := label.new(x = time - chper * pback, y = s1, text = tostring(Round_it(s1)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s1)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s1) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s1)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s1) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s2label := label.new(x = time - chper * pback, y = s2, text = tostring(Round_it(s2)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s2)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s2) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s2)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s2) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s3label := label.new(x = time - chper * pback, y = s3, text = tostring(Round_it(s3)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s3)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s3) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s3)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s3) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s4label := label.new(x = time - chper * pback, y = s4, text = tostring(Round_it(s4)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s4)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s4) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s4)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s4) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s5label := label.new(x = time - chper * pback, y = s5, text = tostring(Round_it(s5)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s5)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s5) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s5)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s5) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s6label := label.new(x = time - chper * pback, y = s6, text = tostring(Round_it(s6)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s6)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s5) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s6)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s6) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s7label := label.new(x = time - chper * pback, y = s7, text = tostring(Round_it(s7)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s7)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s7) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s7)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s7) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s8label := label.new(x = time - chper * pback, y = s8, text = tostring(Round_it(s8)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s8)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s8) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s8)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s8) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    s9label := label.new(x = time - chper * pback, y = s9, text = tostring(Round_it(s9)), color = color.lime, textcolor=c_down, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, s9)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s9) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, s9)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(s9) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+   
+            
+            
+    
+    r0label := label.new(x = time - chper * pback, y = r0, text = tostring(Round_it(r0)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r0)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r0) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r0)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r0) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r1label := label.new(x = time - chper * pback, y = r1, text = tostring(Round_it(r1)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r1)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r1) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r1)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r1) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r2label := label.new(x = time - chper * pback, y = r2, text = tostring(Round_it(r2)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r2)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r2) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r2)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r2) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r3label := label.new(x = time - chper *  pback, y = r3, text = tostring(Round_it(r3)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r3)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r3) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r3)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r3) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r4label := label.new(x = time - chper * pback, y = r4, text = tostring(Round_it(r4)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r4)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r4) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r4)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r4) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r5label := label.new(x = time - chper * pback, y = r5, text = tostring(Round_it(r5)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r5)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r5) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r5)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r5) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r6label := label.new(x = time - chper * pback, y = r6, text = tostring(Round_it(r6)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r6)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r6) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r6)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r6) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r7label := label.new(x = time - chper * pback, y = r7, text = tostring(Round_it(r7)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r7)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r7) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r7)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r7) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r8label := label.new(x = time - chper * pback, y = r8, text = tostring(Round_it(r8)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r8)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r8) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r8)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r8) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+    r9label := label.new(x = time - chper * pback, y = r9, text = tostring(Round_it(r9)), color = color.red, textcolor=c_up, style=label.style_none, xloc = xloc.bar_time, yloc=yloc.price, size=size.small)
+    if f_crossing_level_up(close, r9)
+        alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r9) + " has crossed up! " + timeframe.period, freq = alert.freq_once_per_bar)
+    else
+        if f_crossing_level_down(close, r9)
+            alert("VWAP Expanded Pivots: " + syminfo.ticker + " Level at "+ tostring(r9) + " has crossed down! " + timeframe.period, freq = alert.freq_once_per_bar)
+    
+

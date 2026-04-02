@@ -1,0 +1,32 @@
+//@version=5
+indicator("Price Alert 2024", overlay=true)
+
+level1 = input.float(2.5, "Level 1 Price Move %", step=0.1)
+level2 = input.float(5.0, "Level 2 Price Move %", step=0.1)
+level3 = input.float(7.5, "Level 3 Price Move %", step=0.1)
+level4 = input.float(10.0, "Level 4 Price Move %", step=0.1)
+level5 = input.float(12.5, "Level 5 Price Move %", step=0.1)
+
+priceChange = (close - open) / open * 100
+
+alertMessage(level) =>
+    direction = priceChange >= 0 ? "up" : "down"
+    syminfo.ticker + " has moved " + direction + " by " + str.tostring(math.abs(level)) + "% on the current bar. Last price: " + str.tostring(close)
+
+level1Triggered = ta.barssince(math.abs(priceChange) >= level1)[1] == 0 and math.abs(priceChange) >= level1
+level2Triggered = ta.barssince(math.abs(priceChange) >= level2)[1] == 0 and math.abs(priceChange) >= level2
+level3Triggered = ta.barssince(math.abs(priceChange) >= level3)[1] == 0 and math.abs(priceChange) >= level3
+level4Triggered = ta.barssince(math.abs(priceChange) >= level4)[1] == 0 and math.abs(priceChange) >= level4
+level5Triggered = ta.barssince(math.abs(priceChange) >= level5)[1] == 0 and math.abs(priceChange) >= level5
+
+if level5Triggered
+    alert(alertMessage(level5))
+else if level4Triggered
+    alert(alertMessage(level4))
+else if level3Triggered
+    alert(alertMessage(level3))
+else if level2Triggered
+    alert(alertMessage(level2))
+else if level1Triggered
+    alert(alertMessage(level1))
+

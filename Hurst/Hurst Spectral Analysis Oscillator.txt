@@ -1,0 +1,237 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+//@version=5
+indicator('Hurst Spectral Analysis Oscillator', overlay=false, format=format.price, precision=3) 
+
+//-------------------------------Inputs-------------------------------//
+source = input(hl2, 'Source', group="Bandpass Settings")
+bandWidth = input.float(0.025, 'Bandwidth', minval=0.0, maxval=1.0, group="Bandpass Settings")
+periodBandpassh = input.float(4.3, '5 Day      ', minval=2, inline="1", group="Cycle Settings")
+periodBandpassf = input.float(8.5, '10 Day    ', minval=2, inline="2", group="Cycle Settings")
+periodBandpass2 = input.float(17, '20 Day    ', minval=2, inline="3", group="Cycle Settings")
+periodBandpass4 = input.float(34.1, '40 Day    ', minval=2, inline="4", group="Cycle Settings")
+periodBandpass8 = input.float(68.2, '80 Day    ', minval=2, inline="5", group="Cycle Settings")
+periodBandpass16 = input.float(136.4, '20 Week ', minval=2, inline="6", group="Cycle Settings")
+periodBandpass32 = input.float(272.8, '40 Week ', minval=2, inline="7", group="Cycle Settings")
+periodBandpass64 = input.float(545.6, '18 Month', minval=2, inline="8", group="Cycle Settings")
+periodBandpass128 = input.float(1636.8, '54 Month', minval=2, inline="9", group="Cycle Settings")
+periodBandpass256 = input.float(3273.6, '9 Year    ', minval=2, inline="10", group="Cycle Settings")
+periodBandpass512 = input.float(6547.2, '18 Year  ', minval=2, inline="11", group="Cycle Settings")
+
+
+// Color Selection
+fld18y = #5E0F0B
+fld9y = #DB241A
+fld54m = #D47A35
+fld18m = #C4B727
+fld40w = #62E322
+fld20w = #3C8A15
+fld80 = #67A5A8
+fld40 = #161861
+fld20 = #9658E1
+fld10 = #D15C7B
+fld5 = #E386C2
+fld2 = #B80D18
+fld1 = #FF7F50
+fld5h = #FFB836
+fld0 = color.gray
+
+//colh = input.color(color.purple, " ", inline="1", group="Cycle Settings")
+//colf = input.color(color.blue, " ", inline="2", group="Cycle Settings")
+//col2 = input.color(color.aqua, " ", inline="3", group="Cycle Settings")
+//col4 = input.color(color.green, " ", inline="4", group="Cycle Settings")
+//col8 = input.color(color.yellow, " ", inline="5", group="Cycle Settings")
+//col16 = input.color(color.orange, " ", inline="6", group="Cycle Settings")
+//col32 = input.color(color.red, " ", inline="7", group="Cycle Settings")
+//col64 = input.color(#856c44, " ", inline="8", group="Cycle Settings")
+//col128 = input.color(color.black, " ", inline="9", group="Cycle Settings")
+//col256 = input.color(color.gray, " ", inline="10", group="Cycle Settings")
+//col512 = input.color(color.white, " ", inline="11", group="Cycle Settings")
+//colcompu = input.color(color.new(#00ff0a, 70), "Composite Model Candle Colors", inline="12", group="Cycle Settings") 
+//colcompd = input.color(color.new(#ff0000, 70), " ", inline="12", group="Cycle Settings") 
+
+colh = input.color(fld5, " ", inline="1", group="Cycle Settings")
+colf = input.color(fld10, " ", inline="2", group="Cycle Settings")
+col2 = input.color(fld20, " ", inline="3", group="Cycle Settings")
+col4 = input.color(fld40, " ", inline="4", group="Cycle Settings")
+col8 = input.color(fld80, " ", inline="5", group="Cycle Settings")
+col16 = input.color(fld20w, " ", inline="6", group="Cycle Settings")
+col32 = input.color(fld40w, " ", inline="7", group="Cycle Settings")
+col64 = input.color(fld18m, " ", inline="8", group="Cycle Settings")
+col128 = input.color(fld54m, " ", inline="9", group="Cycle Settings")
+col256 = input.color(fld9y, " ", inline="10", group="Cycle Settings")
+col512 = input.color(fld18y, " ", inline="11", group="Cycle Settings")
+colcompu = input.color(color.new(#00ff0a, 70), "Composite Model Candle Colors", inline="12", group="Cycle Settings") 
+colcompd = input.color(color.new(#ff0000, 70), " ", inline="12", group="Cycle Settings") 
+
+
+// Composite Selection
+comph = input.bool(false, "Composite", inline="1", group="Cycle Settings")
+compf = input.bool(true, "Composite", inline="2", group="Cycle Settings")
+comp2 = input.bool(true, "Composite", inline="3", group="Cycle Settings")
+comp4 = input.bool(true, "Composite", inline="4", group="Cycle Settings")
+comp8 = input.bool(true, "Composite", inline="5", group="Cycle Settings")
+comp16 = input.bool(true, "Composite", inline="6", group="Cycle Settings")
+comp32 = input.bool(false, "Composite", inline="7", group="Cycle Settings")
+comp64 = input.bool(false, "Composite", inline="8", group="Cycle Settings")
+comp128 = input.bool(false, "Composite", inline="9", group="Cycle Settings")
+comp256 = input.bool(false, "Composite", inline="10", group="Cycle Settings")
+comp512 = input.bool(false, "Composite", inline="11", group="Cycle Settings")
+// Analysis Inputs
+mode_sig_in = input.string(title='Bandpass Analysis Mode?', defval='Auto', options=['Auto', 'Manual'])
+_sig_in = input.string("20 Day", "Bandpass for Analysis", options=["5 Day", "10 Day", "20 Day", "40 Day", "80 Day", "20 Week", "40 Week", "18 Month", "54 Month", "9 Year", "18 Year", "None"], group="Analysis Settings")
+decimals = input.int(2, 'Price Decimals', minval=0, maxval=10, group="Analysis Settings")
+position = input.string(position.bottom_center, "Analysis Position", [position.top_center, position.top_right, position.middle_right, position.bottom_right, position.bottom_center, position.bottom_left, position.middle_left, position.top_left], group="Analysis Settings")
+size = input.string(size.small, "Text Size", [size.tiny, size.small, size.normal, size.large, size.huge], group="Analysis Settings")
+tableposy = input.string(defval='top', title='Chart Location', options=['bottom', 'middle', 'top'], inline='chartpos')
+tableposx = input.string(defval='right', title='', options=['left', 'center', 'right'], inline='chartpos')
+showtable = input.bool(defval = true, title = "Show Forecast Table")
+
+auto_sig_in = timeframe.period == 'M' ? "10 Day" : timeframe.period == 'W' ? "20 Day" : timeframe.period == 'D' ? "20 Day": timeframe.period == '240' ? "20 Day" : timeframe.period == '120' ? "40 Day" : timeframe.period == '60' ? "80 Day" : timeframe.period == '30' ? "20 Week" : timeframe.period == '15' ? "40 Week" : timeframe.period == '10' ? "40 Week": timeframe.period == '5' ? "40 Week" : "40 Day"
+
+sig_in  = mode_sig_in == 'Auto' ? auto_sig_in : _sig_in
+
+//-------------------------------Functions & Calculations-------------------------------//
+// @TMPascoe found & offered this bandpass by @HPotter found here https://www.tradingview.com/script/A1jhw5fG-Bandpass-Filter/
+//      @BarefootJoey turned the code into a function and made it accept float Period
+bpf(Series, float Period, Delta) =>
+    float tmpbpf = na 
+    var beta = math.cos(3.14 * (360 / Period) / 180)
+    var gamma = 1 / math.cos(3.14 * (720 * Delta / Period) / 180)
+    var alpha = gamma - math.sqrt(gamma * gamma - 1)
+    tmpbpf := 0.5 * (1 - alpha) * (Series - Series[2]) + beta * (1 + alpha) * nz(tmpbpf[1]) - alpha * nz(tmpbpf[2])
+// Individual Bandpass Filters
+BPFh = bpf(source, periodBandpassh, bandWidth)
+BPFf = bpf(source, periodBandpassf, bandWidth)
+BPF2 = bpf(source, periodBandpass2, bandWidth)
+BPF4 = bpf(source, periodBandpass4, bandWidth)
+BPF8 = bpf(source, periodBandpass8, bandWidth)
+BPF16 = bpf(source, periodBandpass16, bandWidth)
+BPF32 = bpf(source, periodBandpass32, bandWidth)
+BPF64 = bpf(source, periodBandpass64, bandWidth)
+BPF128 = bpf(source, periodBandpass128, bandWidth)
+BPF256 = bpf(source, periodBandpass256, bandWidth)
+BPF512 = bpf(source, periodBandpass512, bandWidth)
+// Composite
+compBPF = (comph?BPFh:0) + (compf?BPFf:0) + (comp2?BPF2:0) + (comp4?BPF4:0) + (comp8?BPF8:0) + (comp16?BPF16:0) + (comp32?BPF32:0) + (comp64?BPF64:0) + (comp128?BPF128:0) + (comp256?BPF256:0) + (comp512?BPF512:0)
+col = ta.change(compBPF) > 0 ? colcompu : colcompd
+
+// Cycle Analysis
+// Truncate Decimals
+truncate(number, pricedecimals) =>
+    factor = math.pow(10, pricedecimals)
+    int(number * factor) / factor
+
+// Switch output/plot for analytics
+sig_out = sig_in == "5 Day" ? BPFh : sig_in == "10 Day" ? BPFf : sig_in == "20 Day" ? BPF2 : sig_in == "40 Day" ? BPF4 : sig_in == "80 Day" ? BPF8 : sig_in == "20 Week" ? BPF16 : sig_in == "40 Week" ? BPF32 : sig_in == "18 Month" ? BPF64 : sig_in == "54 Month" ? BPF128 : sig_in == "9 Year" ? BPF256 : sig_in == "18 Year" ? BPF512 : na
+period_out = sig_in == "5 Day" ? periodBandpassh : sig_in == "10 Day" ? periodBandpassf : sig_in == "20 Day" ? periodBandpass2 : sig_in == "40 Day" ? periodBandpass4 : sig_in == "80 Day" ? periodBandpass8 : sig_in == "20 Week" ? periodBandpass16 : sig_in == "40 Week" ? periodBandpass32 : sig_in == "18 Month" ? periodBandpass64 : sig_in == "54 Month" ? periodBandpass128 : sig_in == "9 Year" ? periodBandpass256 : sig_in == "18 Year" ? periodBandpass512 : 1 // :na 
+col_out = sig_in == "5 Day" ? colh : sig_in == "10 Day" ? colf : sig_in == "20 Day" ? col2 : sig_in == "40 Day" ? col4 : sig_in == "80 Day" ? col8 : sig_in == "20 Week" ? col16 : sig_in == "40 Week" ? col32 : sig_in == "18 Month" ? col64 : sig_in == "54 Month" ? col128 : sig_in == "9 Year" ? col256 : sig_in == "18 Year" ? col512 : color.gray
+
+// Highs/Lows
+hi = sig_out[2]<sig_out[1] and sig_out[1]>sig_out
+lo = sig_out[2]>sig_out[1] and sig_out[1]<sig_out
+
+// Define Crosses
+midcross = ta.cross(sig_out, 0)
+midcrossbars = ta.barssince(midcross)
+midcrossbars2 = ta.barssince(midcross)[1]
+last_wavelength = ta.barssince(midcross) - ta.barssince(midcross)
+// Bars Since Last Amp Hi & Lo
+xhi = ta.barssince(hi)
+xlo = ta.barssince(lo)
+
+// Wavelength   
+wavelength = math.round(math.abs(xhi-xlo)*2)
+
+// Last Amp Hi & Lo
+bpfphi = ta.highest(sig_out,math.round(period_out))
+bpfamphi = ta.valuewhen(bpfphi, sig_out, 0)
+bpfplo = ta.lowest(sig_out,math.round(period_out))
+bpfamplo = ta.valuewhen(bpfplo, sig_out, 0)
+tot_amp = bpfphi - bpfplo
+// Estimates/Forecasts
+next_peak = -math.abs(xhi-wavelength)
+next_trough = -math.abs(xlo-wavelength)
+next_node = math.abs(xhi-xlo)-midcrossbars
+// Highlight background of next peak/node/trough
+next_peak_col = color.new(color.red,hi?75:100)
+next_node_col = color.new(color.gray, midcross?75:100)
+next_trough_col = color.new(color.green, lo?75:100)
+
+// Sentiment 
+amp_sent = bpfphi>math.abs(bpfplo)?"🟢":bpfphi<math.abs(bpfplo)?"🔴":"⚪"
+bbwavelen = wavelength>period_out?"🟢":wavelength<period_out?"🔴":"⚪"
+bbpt = -next_peak<-next_trough?"Bullish🟢":-next_peak>-next_trough?"Bearish🔴":"Neutral⚪"
+
+// Analytics Tooltip 📏🧮⏳🎰🤖🎭🔮📈📉🔁🌊🔴🟢⚪
+labeltt= "🔄 Cycle: " + str.tostring(sig_in) + "/" + str.tostring(period_out) + " bars" +
+ "\n📏 Period (⊺): ~" + str.tostring(math.abs(xhi-xlo)) + " bars" +
+ "\n🌊 Wavelength (λ): ~" + str.tostring(wavelength) + " bars " + bbwavelen +
+ "\n⚖ Delta (∆) Amplitude (ª): " + str.tostring(truncate(tot_amp, decimals)) + " " + amp_sent +
+ "\n📈 Peak (ª): " + str.tostring(truncate(bpfphi, decimals)) + ", " + str.tostring(xhi) + " bars ago" + 
+ "\n🔀 Node: " + str.tostring(midcrossbars) + " bars ago" +
+ "\n📉 Trough (ª): " + str.tostring(truncate(bpfplo, decimals)) + ", " + str.tostring(xlo) + " bars ago" + 
+ "\n\n🔮 Estimates: " + bbpt +
+ "\n📈 Next Peak: " + str.tostring(-next_peak) + "ish bars " +
+ "\n🔀 Next Node: " + str.tostring(next_node) + "ish bars" + 
+ "\n📉 Next Trough: " + str.tostring(-next_trough) + "ish bars " 
+
+labeltt2= "🔄 Cycle: " + str.tostring(sig_in) + "/" + str.tostring(period_out) + " bars" +
+ "\n📏 Period (⊺): ~" + str.tostring(math.abs(xhi-xlo)) + " bars" +
+ "\n🌊 Wavelength (λ): ~" + str.tostring(wavelength) + " bars " + bbwavelen +
+ "\n\n🔮 Estimates: " + bbpt +
+ "\n📈 Next Peak: " + str.tostring(-next_peak) + "ish bars " +
+ "\n🔀 Next Node: " + str.tostring(next_node) + "ish bars" + 
+ "\n📉 Next Trough: " + str.tostring(-next_trough) + "ish bars " 
+
+
+// ------------------------------- Plots, Displays, Outputs -------------------------------//
+plot(0, "Midline", color.new(color.gray,30), style=plot.style_histogram, display=display.none)
+//plot(BPFh, '5 Day', color=color.new(colh, 0), linewidth=sig_in == "5 Day" ? 3 : 1, display=display.none)
+//plot(BPFf, '10 Day', color=color.new(colf, 0), linewidth=sig_in == "10 Day" ? 3 : 1, display=display.none)
+//plot(BPF2, '20 Day', color=color.new(col2, 0), linewidth=sig_in == "20 Day" ? 3 : 1, display=display.all)
+//plot(BPF4, '40 Day', color=color.new(col4, 0), linewidth=sig_in == "40 Day" ? 3 : 1, display=display.none)
+//plot(BPF8, '80 Day', color=color.new(col8, 0), linewidth=sig_in == "80 Day" ? 3 : 1, display=display.none)
+//plot(BPF16, '20 Week', color=color.new(col16, 0), linewidth=sig_in == "20 Week" ? 3 : 1, display=display.none)
+//plot(BPF32, '40 Week', color=color.new(col32, 0), linewidth=sig_in == "40 Week" ? 3 : 1, display=display.none)
+//plot(BPF64, '18 Month', color=color.new(col64, 0), linewidth=sig_in == "18 Month" ? 3 : 1, display=display.none)
+//plot(BPF128, '54 Month', color=color.new(col128, 0), linewidth=sig_in == "54 Month" ? 3 : 1, display=display.none)
+//plot(BPF256, '9 Year', color=color.new(col256, 0), linewidth=sig_in == "9 Year" ? 3 : 1, display=display.none)
+//plot(BPF512, '18 Year', color=color.new(col512, 0), linewidth=sig_in == "18 Year" ? 3 : 1, display=display.none)
+
+plot(BPFh, '5 Day', color=color.new(colh, 0), linewidth=3, display=display.none)
+plot(BPFf, '10 Day', color=color.new(colf, 0), linewidth=3, display=display.none)
+plot(BPF2, '20 Day', color=color.new(col2, 0), linewidth=3, display=display.all)
+plot(BPF4, '40 Day', color=color.new(col4, 0), linewidth=3, display=display.all)
+plot(BPF8, '80 Day', color=color.new(col8, 0), linewidth=3, display=display.all)
+plot(BPF16, '20 Week', color=color.new(col16, 0), linewidth=3, display=display.none)
+plot(BPF32, '40 Week', color=color.new(col32, 0), linewidth=3, display=display.none)
+plot(BPF64, '18 Month', color=color.new(col64, 0), linewidth=3, display=display.none)
+plot(BPF128, '54 Month', color=color.new(col128, 0), linewidth=3, display=display.none)
+plot(BPF256, '9 Year', color=color.new(col256, 0), linewidth=3, display=display.none)
+plot(BPF512, '18 Year', color=color.new(col512, 0), linewidth=3, display=display.none)
+
+plotcandle(compBPF[1], ta.lowest(compBPF,1), math.min(compBPF,compBPF[1]), compBPF, color=col, wickcolor=color.new(col,100), bordercolor=col, title='Composite Candles', display=display.none)
+
+bgcolor(color=next_peak_col, title="Peak Estimate", offset=wavelength)
+bgcolor(color=next_node_col, title="Node Estimate", offset=wavelength)
+bgcolor(color=next_trough_col, title="Trough Estimate", offset=wavelength)
+
+plotshape(hi, "Actual Peak", shape.triangledown, location.top, color.rgb(255, 0, 0, 33), size=size.tiny, display=display.none) 
+plotshape(lo, "Actual Trough", shape.triangleup, location.bottom, color.rgb(0, 255, 8, 33), size=size.tiny, display=display.none) 
+
+var table Ticker = na
+table.delete(Ticker)
+Ticker := table.new(position, 1, 1)
+if barstate.islast
+    table.cell(Ticker, 0, 0, 
+      text = "🔄 Cycle Analysis", 
+      text_size = size, 
+      text_color = color.new(col_out,0),
+      tooltip = sig_in!="None"?labeltt:"No Bandpass selected. Double click to open & change Settings.")
+
+
+var srtable = table.new(position = tableposy + '_' + tableposx, columns = 5, rows= 11, frame_width = 0, frame_color = color.gray, border_width = 1, border_color = color.gray)
+if showtable
+    table.cell(srtable, 0, 0, text = labeltt2, text_color = color.white, bgcolor = color.new(color.gray,100), text_size = size.small)
+    table.merge_cells(srtable, 0, 0, 3, 0)
