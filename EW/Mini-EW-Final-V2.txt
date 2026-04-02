@@ -1078,7 +1078,7 @@ if barstate.islast
             float p5 = originP
             if w5Done
                 p5 := array.get(local_px, sW5)
-            else if w4Done
+            else if w4Done or w3Done
                 // Main box at W5 = W1, step to extended if price passes
                 float t5_w1eq  = calcProj(p4, p1, originP, 1.0, dir0, useLogScale)
                 float t5_161w3 = calcProj(p4, p3, p2, 1.618, dir0, useLogScale)
@@ -1273,14 +1273,14 @@ if barstate.islast
                 array.push(fut_p, p2), array.push(fut_l, "(2)")
             if not w3Done
                 array.push(fut_p, p3), array.push(fut_l, "(3)")
-            if not w5Done
+            if w3Done and not w5Done
                 array.push(fut_p, p4), array.push(fut_l, "(4)")
-            if not w5Done
                 array.push(fut_p, p5), array.push(fut_l, "(5)")
 
-            array.push(fut_p, pa), array.push(fut_l, "A")
-            array.push(fut_p, pb), array.push(fut_l, "B")
-            array.push(fut_p, pc), array.push(fut_l, "C")
+            if w5Done
+                array.push(fut_p, pa), array.push(fut_l, "A")
+                array.push(fut_p, pb), array.push(fut_l, "B")
+                array.push(fut_p, pc), array.push(fut_l, "C")
 
             // ═══════════════════════════════════════════════════════════════
             // ROLLING FIB TARGETS — W2, W3, W4, A, B, C
@@ -1317,7 +1317,7 @@ if barstate.islast
                 int fibStartT = math.max(projStartT, bar_index)
                 for fi = 0 to array.size(fut_l) - 1
                     string wName = array.get(fut_l, fi)
-                    int wPos = (wName == "(2)" or (wName == "(4)" and curMot == 4)) ? bar_index : fibStartT + (fi + 1) * projOffsetBars
+                    int wPos = (wName == "(2)" or wName == "(4)") ? bar_index : fibStartT + (fi + 1) * projOffsetBars
                     int wS = wPos
                     int wE = wPos + 1
 
