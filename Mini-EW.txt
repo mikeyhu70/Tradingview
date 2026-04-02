@@ -119,6 +119,9 @@ var label lbl_w4 = label.new(na, na, "", size=size.small, textcolor=color.white)
 var label lbl_w5 = label.new(na, na, "", size=size.small, textcolor=color.white)
 var label lbl_debug = label.new(na, na, "", size=size.small, textcolor=color.white)
 
+var line[]  _dl   = array.new<line>()
+var label[] _dlab = array.new<label>()
+
 var float[] fut_p = array.new_float()
 var string[] fut_l = array.new_string()
 var int[]   fut_t = array.new_int()     // bar position of each wave box
@@ -136,10 +139,10 @@ calcProj(baseP, refA, refB, mult, dir, isLog) =>
         baseP + dir * (math.abs(refA - refB) * mult)
 
 // ─── Drawing Functions ───
-drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCounter, boxSz, macroIsBull, hOffset) =>
+drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCounter, boxSz, macroIsBull, hOffset, line[] dl, label[] dlab) =>
     simP = startP
     simT = startT
-    barSp = hOffset 
+    barSp = hOffset
     bool isFirstForwardLine = true
     array.clear(fut_t)
 
@@ -150,7 +153,7 @@ drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCo
             nt = simT + barSp
             array.push(fut_t, nt)
 
-            bool isUpMove = tp > simP 
+            bool isUpMove = tp > simP
             bool isWithTrend = (macroIsBull and isUpMove) or (not macroIsBull and not isUpMove)
             color activeBoxCol = isWithTrend ? colWith : colCounter
 
@@ -162,22 +165,22 @@ drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCo
 
             if isFirstForwardLine
                 if not hideProjLines
-                    line.new(startT, startP, nt, tp, color=lineCol, style=style, width=2)
+                    array.push(dl, line.new(startT, startP, nt, tp, color=lineCol, style=style, width=2))
                 if lb != ""
-                    label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz)
+                    array.push(dlab, label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz))
                 isFirstForwardLine := false
             else
                 if not hideProjLines
-                    line.new(simT, simP, nt, tp, color=lineCol, style=style, width=2)
+                    array.push(dl, line.new(simT, simP, nt, tp, color=lineCol, style=style, width=2))
                 if lb != ""
-                    label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz)
+                    array.push(dlab, label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz))
             simP := tp
             simT := nt
 
-drawConfluenceLine(isOn, val, startT, endT, txt, col, lStyle) =>
+drawConfluenceLine(isOn, val, startT, endT, txt, col, lStyle, line[] dl, label[] dlab) =>
     if isOn and not na(val)
-        line.new(startT, val, endT, val, color=color.new(col, 20), style=lStyle, width=1)
-        label.new(endT, val, txt + " (" + str.tostring(val, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_left, textcolor=col, size=confLblSz)
+        array.push(dl, line.new(startT, val, endT, val, color=color.new(col, 20), style=lStyle, width=1))
+        array.push(dlab, label.new(endT, val, txt + " (" + str.tostring(val, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_left, textcolor=col, size=confLblSz))
 
 wma50  = ta.wma(close, 50)
 wma200 = ta.wma(close, 200)
@@ -595,6 +598,14 @@ if not na(pl5)
 
 // ─── Main Execution ───
 if barstate.islast
+    // Delete all dynamic drawings from the previous tick before redrawing
+    for _l in _dl
+        line.delete(_l)
+    array.clear(_dl)
+    for _lb in _dlab
+        label.delete(_lb)
+    array.clear(_dlab)
+
     isBull = true
     if trendDir == "Bearish"
         isBull := false
@@ -1133,8 +1144,8 @@ if barstate.islast
                 for idx in w5Draw
                     float tgt = array.get(w5AllP, idx)
                     string lbTxt = array.get(w5AllL, idx)
-                    line.new(w5S, tgt, w5E, tgt, color=color.new(w5Col, 40), style=line.style_dotted, width=1)
-                    label.new(w5S, tgt, "W5: " + lbTxt + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=w5Col, size=fibLblSz)
+                    array.push(_dl, line.new(w5S, tgt, w5E, tgt, color=color.new(w5Col, 40), style=line.style_dotted, width=1))
+                    array.push(_dlab, label.new(w5S, tgt, "W5: " + lbTxt + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=w5Col, size=fibLblSz))
 
             // ── W5 confirmation: price retraced 38.2% of W4→W5 ──
             if isValidMotive and w5Done and sW5 > sW4 and sW5 < sz
@@ -1386,8 +1397,8 @@ if barstate.islast
                         for di in drawI
                             float tgt = array.get(wFibP, di)
                             string lbT = array.get(wFibL, di)
-                            line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1)
-                            label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz)
+                            array.push(_dl, line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1))
+                            array.push(_dlab, label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz))
 
         else
             float pa = aDone ? array.get(local_px, sW3) : calcProj(originP, originP * 1.05, originP, 1.0, dir0, useLogScale)
@@ -1557,15 +1568,15 @@ if barstate.islast
                         for di in drawI
                             float tgt = array.get(wFibP, di)
                             string lbT = array.get(wFibL, di)
-                            line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1)
-                            label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz)
+                            array.push(_dl, line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1))
+                            array.push(_dlab, label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz))
 
         //activeProjStyle = projStyleIn == "Solid" ? line.style_solid : projStyleIn == "Dotted" ? line.style_dotted : line.style_dashed
         activeProjStyle = projStyleIn == "Solid" ? line.style_solid : projStyleIn == "Dashed" ? line.style_dashed : line.style_dotted
         activeBoxSize = projBoxSzIn == "Normal" ? size.normal : projBoxSzIn == "Small" ? size.small : projBoxSzIn == "Large" ? size.large : size.tiny
 
         // projStartP/T already set by the motive or ABC branch above
-        drawProjectionLines(projStartP, projStartT, colorProj, activeProjStyle, close, projBoxWith, projBoxCounter, activeBoxSize, isBull, projOffsetBars)
+        drawProjectionLines(projStartP, projStartT, colorProj, activeProjStyle, close, projBoxWith, projBoxCounter, activeBoxSize, isBull, projOffsetBars, _dl, _dlab)
 
         int extStartT = bar_index + math.max(1, fibOffsetBars - 70) 
         int extEndT = bar_index + fibOffsetBars
@@ -1634,28 +1645,28 @@ if barstate.islast
                 string fibPrefix = (f > 0.0 and f < 1.0) ? "Ret " : "Ext "
                 color fibCol = f > 1.0 ? color.new(color.teal, 0) : f == 1.0 ? color.new(color.silver, 0) : color.new(color.fuchsia, 0)
                 
-                line.new(extStartT, p, extEndT, p, color=color.new(fibCol, 40), style=line.style_dotted, width=1)
-                label.new(extEndT, p, fibPrefix + str.tostring(f) + " (" + str.tostring(p, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_left, textcolor=fibCol, size=size.tiny)
+                array.push(_dl, line.new(extStartT, p, extEndT, p, color=color.new(fibCol, 40), style=line.style_dotted, width=1))
+                array.push(_dlab, label.new(extEndT, p, fibPrefix + str.tostring(f) + " (" + str.tostring(p, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_left, textcolor=fibCol, size=size.tiny))
 
         // ─── CONFLUENCE TARGETS MATRIX (Daily MAs & BBs) ───
-        drawConfluenceLine(showMA5, ma5, extStartT, extEndT, "D-MA(" + str.tostring(lenMA5) + ")", colMA, activeConfStyle)
-        drawConfluenceLine(showMA10, ma10, extStartT, extEndT, "D-MA(" + str.tostring(lenMA10) + ")", colMA, activeConfStyle)
-        drawConfluenceLine(showMA20, ma20, extStartT, extEndT, "D-MA(" + str.tostring(lenMA20) + ")", colMA, activeConfStyle)
-        drawConfluenceLine(showMA55, ma55, extStartT, extEndT, "D-MA(" + str.tostring(lenMA55) + ")", colMA, activeConfStyle)
-        drawConfluenceLine(showMA200, ma200, extStartT, extEndT, "D-MA(" + str.tostring(lenMA200) + ")", colMA, activeConfStyle)
-        drawConfluenceLine(showWMA40, wma40, extStartT, extEndT, "W-MA(" + str.tostring(lenWMA40) + ")", colMA, activeConfStyle)
-        
+        drawConfluenceLine(showMA5, ma5, extStartT, extEndT, "D-MA(" + str.tostring(lenMA5) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA10, ma10, extStartT, extEndT, "D-MA(" + str.tostring(lenMA10) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA20, ma20, extStartT, extEndT, "D-MA(" + str.tostring(lenMA20) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA55, ma55, extStartT, extEndT, "D-MA(" + str.tostring(lenMA55) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA200, ma200, extStartT, extEndT, "D-MA(" + str.tostring(lenMA200) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showWMA40, wma40, extStartT, extEndT, "W-MA(" + str.tostring(lenWMA40) + ")", colMA, activeConfStyle, _dl, _dlab)
+
         int bbExtStartT = bar_index + math.max(1, bbOffsetBars - 25)
         int bbExtEndT = bar_index + bbOffsetBars
-        drawConfluenceLine(showBB, bbUp, bbExtStartT, bbExtEndT, "BB Upper(" + str.tostring(lenBB) + ")", colBB, activeConfStyle)
-        drawConfluenceLine(showBB, bbMid, bbExtStartT, bbExtEndT, "BB Basis(" + str.tostring(lenBB) + ")", colBB, activeConfStyle)
-        drawConfluenceLine(showBB, bbLow, bbExtStartT, bbExtEndT, "BB Lower(" + str.tostring(lenBB) + ")", colBB, activeConfStyle)
+        drawConfluenceLine(showBB, bbUp, bbExtStartT, bbExtEndT, "BB Upper(" + str.tostring(lenBB) + ")", colBB, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showBB, bbMid, bbExtStartT, bbExtEndT, "BB Basis(" + str.tostring(lenBB) + ")", colBB, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showBB, bbLow, bbExtStartT, bbExtEndT, "BB Lower(" + str.tostring(lenBB) + ")", colBB, activeConfStyle, _dl, _dlab)
 
         if showVolMA and not na(volMA) and not na(bbLow)
             int volStartT = bar_index + math.max(1, volHOffset - 25)
             int volEndT = bar_index + volHOffset
             float volY = bbLow - (atrVal * volVAtr)
-            drawConfluenceLine(true, volY, volStartT, volEndT, "Vol MA(" + str.tostring(lenVolMA) + "): " + str.tostring(volMA, format.volume), colVol, activeConfStyle)
+            drawConfluenceLine(true, volY, volStartT, volEndT, "Vol MA(" + str.tostring(lenVolMA) + "): " + str.tostring(volMA, format.volume), colVol, activeConfStyle, _dl, _dlab)
 
         if showTable
             table tbl = table.new(position.bottom_right, 4, 14, border_width=1, border_color=color.new(color.gray, 60), frame_width=2, frame_color=color.new(color.gray, 40))
