@@ -2,7 +2,7 @@
 indicator("Mini Elliott Wave 2026-2", overlay=true, max_lines_count=500, max_labels_count=500)
 
 // ─── Inputs ───
-length         = input.int(2, "ZigZag Depth (Base)", minval=2, tooltip="Base ZigZag depth. The optimizer will test this and higher values.")
+length         = input.int(3, "ZigZag Depth (Base)", minval=2, tooltip="Base ZigZag depth. The optimizer will test this and higher values.")
 step           = input.int(1, "Step Size", minval=1, tooltip="Increment for each iteration (e.g., step=2 tests 8, 10, 12...)")
 iterations     = input.int(6, "Iterations", minval=1, maxval=20, tooltip="Number of different depths to test (e.g., 3 iterations with base 8 and step 2 tests depths 8, 10, 12)")
 lookbackSwings = input.int(10, "Lookback Swings (around 10 is optimal)", minval=2)
@@ -21,8 +21,8 @@ fibOffsetBars  = input.int(60, "Fibonacci Label Offset (Bars)", group="Fibonacci
 
 // --- Confluence Targets (MAs & BBs) ---
 grpConf = "Confluence Targets (MAs & BBs)"
-colMA       = input.color(color.rgb(56, 224, 253), "MA Color (Pink)", group=grpConf, inline="c1")
-colBB       = input.color(#FFB6C1, "BB Color (Light Pink)", group=grpConf, inline="c1")
+colMA       = input.color(color.white, "MA Color", group=grpConf, inline="c1")
+colBB       = input.color(#FFB6C1, "BB Color", group=grpConf, inline="c1")
 confStyleIn = input.string("Dotted", "Line Style", options=["Solid", "Dotted", "Dashed"], group=grpConf)
 confLblSzIn = input.string("Small", "Label Size", options=["Tiny", "Small", "Normal"], group=grpConf, tooltip="Text size for MA and BB labels.")
 confLblSz   = confLblSzIn == "Normal" ? size.normal : confLblSzIn == "Small" ? size.small : size.tiny
@@ -70,12 +70,13 @@ trendDir       = input.string("Auto", "Trend Direction", options=["Auto","Bullis
 colorUp        = input.color(color.green, "Up Color", group="Cosmetics")
 colorDown      = input.color(color.red, "Down Color", group="Cosmetics")
 colorProj      = input.color(#2196F3, "Forecast Line Color", group="Cosmetics")
-projStyleIn    = input.string("Dotted", "Forecast Line Style", options=["Solid", "Dotted", "Dashed"], group="Cosmetics")
+//projStyleIn    = input.string("Dotted", "Forecast Line Style", options=["Solid", "Dotted", "Dashed"], group="Cosmetics")
+projStyleIn    = input.string("Hidden", "Forecast Line Style", options=["Hidden", "Solid", "Dotted", "Dashed"], group="Cosmetics")
 projBoxWith    = input.color(color.new(#00BCD4, 0), "Forecast Box (With Trend)", group="Cosmetics")
 projBoxCounter = input.color(color.new(#E91E63, 0), "Forecast Box (Counter Trend)", group="Cosmetics")
-projBoxSzIn    = input.string("Tiny", "Forecast Box Size", options=["Tiny", "Small", "Normal", "Large"], group="Cosmetics")
+projBoxSzIn    = input.string("Small", "Forecast Box Size", options=["Tiny", "Small", "Normal", "Large"], group="Cosmetics")
 projBoxTransp  = input.int(50, "Forecast Box Transparency", minval=0, maxval=100, group="Cosmetics", tooltip="0 = solid, 100 = fully transparent")
-projOffsetBars = input.int(60, "Forecast Horizontal Offset (Bars)", group="Cosmetics", tooltip="Shifts the projected target boxes left or right to avoid overlapping other indicators.")
+projOffsetBars = input.int(40, "Forecast Horizontal Offset (Bars)", group="Cosmetics", tooltip="Shifts the projected target boxes left or right to avoid overlapping other indicators.")
 
 // --- ATR Label Displacement ---
 atrLen         = input.int(14, "ATR Length for Labels", group="Cosmetics")
@@ -120,6 +121,9 @@ var label lbl_debug = label.new(na, na, "", size=size.small, textcolor=color.whi
 
 var float[] fut_p = array.new_float()
 var string[] fut_l = array.new_string()
+var int[]   fut_t = array.new_int()     // bar position of each wave box
+bool hideProjLines = projStyleIn == "Hidden"
+
 
 // ─── UNIVERSAL LOG/LIN PROJECTION ENGINE ───
 calcProj(baseP, refA, refB, mult, dir, isLog) =>
@@ -137,12 +141,14 @@ drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCo
     simT = startT
     barSp = hOffset 
     bool isFirstForwardLine = true
+    array.clear(fut_t)
 
     if array.size(fut_p) > 0
         for i = 0 to array.size(fut_p) - 1
             tp = array.get(fut_p, i)
             lb = array.get(fut_l, i)
             nt = simT + barSp
+            array.push(fut_t, nt)
 
             bool isUpMove = tp > simP 
             bool isWithTrend = (macroIsBull and isUpMove) or (not macroIsBull and not isUpMove)
@@ -155,12 +161,14 @@ drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCo
                 finalLb := lb + " (" + pctStr + ")"
 
             if isFirstForwardLine
-                line.new(startT, currentPrice, nt, tp, color=lineCol, style=style, width=2)
+                if not hideProjLines
+                    line.new(startT, startP, nt, tp, color=lineCol, style=style, width=2)
                 if lb != ""
                     label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz)
                 isFirstForwardLine := false
             else
-                line.new(simT, simP, nt, tp, color=lineCol, style=style, width=2)
+                if not hideProjLines
+                    line.new(simT, simP, nt, tp, color=lineCol, style=style, width=2)
                 if lb != ""
                     label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz)
             simP := tp
@@ -970,6 +978,10 @@ if barstate.islast
         float originP = array.get(local_px, sOrigin)
         float dir0 = isBull ? 1.0 : -1.0
 
+        // Projection start — set by each branch, used by rolling fibs + drawProjectionLines
+        float projStartP = close
+        int   projStartT = bar_index
+
         bool w1Done = isValidMotive and sW1 > sOrigin and sW1 < sz
         bool w2Done = isValidMotive and sW2 > sW1 and sW2 < sz
         bool w3Done = isValidMotive and sW3 > sW2 and sW3 < sz
@@ -1113,9 +1125,10 @@ if barstate.islast
                             array.push(w5Draw, nW5 - i)
 
                 // Draw the selected fib lines
-                int w5C = w5Done ? array.get(local_pt, sW5) : (bar_index + projOffsetBars)
-                int w5S = w5C - 6
-                int w5E = w5C - 1
+                // When projecting, position relative to W4 (matches drawProjectionLines origin)
+                int w5C = w5Done ? array.get(local_pt, sW5) : (w4Done ? array.get(local_pt, sW4) + projOffsetBars : bar_index + projOffsetBars)
+                int w5S = w5C
+                int w5E = w5C + 1
                 color w5Col = isBull ? color.lime : color.orange
                 for idx in w5Draw
                     float tgt = array.get(w5AllP, idx)
@@ -1247,6 +1260,29 @@ if barstate.islast
             // ═══════════════════════════════════════════════════════════════
             // ROLLING FIB TARGETS — W2, W3, W4, A, B, C
             // ═══════════════════════════════════════════════════════════════
+            // Set projection origin for this branch
+            if w5Done
+                int lastIdx = sW5
+                if sW5 + 3 < sz
+                    lastIdx := sW5 + 3
+                else if sW5 + 2 < sz
+                    lastIdx := sW5 + 2
+                else if sW5 + 1 < sz
+                    lastIdx := sW5 + 1
+                projStartP := array.get(local_px, lastIdx)
+                projStartT := array.get(local_pt, lastIdx)
+            else if w4Done
+                projStartP := array.get(local_px, sW4)
+                projStartT := array.get(local_pt, sW4)
+            else if w3Done
+                projStartP := array.get(local_px, sW3)
+                projStartT := array.get(local_pt, sW3)
+            else if w2Done
+                projStartP := array.get(local_px, sW2)
+                projStartT := array.get(local_pt, sW2)
+            else if w1Done
+                projStartP := array.get(local_px, sW1)
+                projStartT := array.get(local_pt, sW1)
             // For each projected wave, compute EW fib targets and show
             // only the 3 above + 3 below current price (hide if too far)
             // W5 targets are handled separately above (full extension set)
@@ -1254,9 +1290,9 @@ if barstate.islast
             if showW5Fibs and array.size(fut_l) > 0
                 for fi = 0 to array.size(fut_l) - 1
                     string wName = array.get(fut_l, fi)
-                    int wPos = bar_index + (fi + 1) * projOffsetBars
-                    int wS = wPos - 6
-                    int wE = wPos - 1
+                    int wPos = projStartT + (fi + 1) * projOffsetBars
+                    int wS = wPos
+                    int wE = wPos + 1
 
                     // Wave prefix for labels
                     string wPfx = wName == "(1)" ? "W1" : wName == "(2)" ? "W2" : wName == "(3)" ? "W3" : wName == "(4)" ? "W4" : wName == "(5)" ? "W5" : wName == "A" ? "W/A" : wName == "B" ? "W/B" : wName == "C" ? "W/C" : ""
@@ -1433,13 +1469,24 @@ if barstate.islast
             array.push(fut_p, opp4), array.push(fut_l, "(4)")
             array.push(fut_p, opp5), array.push(fut_l, "(5)")
 
+            // Set projection origin for ABC branch
+            if cDone
+                projStartP := array.get(local_px, sW5)
+                projStartT := array.get(local_pt, sW5)
+            else if bDone
+                projStartP := array.get(local_px, sW4)
+                projStartT := array.get(local_pt, sW4)
+            else if aDone
+                projStartP := array.get(local_px, sW3)
+                projStartT := array.get(local_pt, sW3)
+
             // ── Rolling fibs for projected impulse after ABC ──
             if showW5Fibs and array.size(fut_l) > 0
                 for fi = 0 to array.size(fut_l) - 1
                     string wName = array.get(fut_l, fi)
-                    int wPos = bar_index + (fi + 1) * projOffsetBars
-                    int wS = wPos - 6
-                    int wE = wPos - 1
+                    int wPos = projStartT + (fi + 1) * projOffsetBars
+                    int wS = wPos
+                    int wE = wPos + 1
                     string wPfx = wName == "(1)" ? "W1" : wName == "(2)" ? "W2" : wName == "(3)" ? "W3" : wName == "(4)" ? "W4" : wName == "(5)" ? "W5" : wName == "A" ? "W/A" : wName == "B" ? "W/B" : wName == "C" ? "W/C" : ""
                     float[] wFibP = array.new_float()
                     string[] wFibL = array.new_string()
@@ -1513,10 +1560,12 @@ if barstate.islast
                             line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1)
                             label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz)
 
-        activeProjStyle = projStyleIn == "Solid" ? line.style_solid : projStyleIn == "Dotted" ? line.style_dotted : line.style_dashed
+        //activeProjStyle = projStyleIn == "Solid" ? line.style_solid : projStyleIn == "Dotted" ? line.style_dotted : line.style_dashed
+        activeProjStyle = projStyleIn == "Solid" ? line.style_solid : projStyleIn == "Dashed" ? line.style_dashed : line.style_dotted
         activeBoxSize = projBoxSzIn == "Normal" ? size.normal : projBoxSzIn == "Small" ? size.small : projBoxSzIn == "Large" ? size.large : size.tiny
 
-        drawProjectionLines(close, bar_index, colorProj, activeProjStyle, close, projBoxWith, projBoxCounter, activeBoxSize, isBull, projOffsetBars)
+        // projStartP/T already set by the motive or ABC branch above
+        drawProjectionLines(projStartP, projStartT, colorProj, activeProjStyle, close, projBoxWith, projBoxCounter, activeBoxSize, isBull, projOffsetBars)
 
         int extStartT = bar_index + math.max(1, fibOffsetBars - 70) 
         int extEndT = bar_index + fibOffsetBars
