@@ -1269,11 +1269,11 @@ if barstate.islast
 
             if not w1Done
                 array.push(fut_p, p1), array.push(fut_l, "(1)")
-            if not w2Done
+            if not w3Done
                 array.push(fut_p, p2), array.push(fut_l, "(2)")
             if not w3Done
                 array.push(fut_p, p3), array.push(fut_l, "(3)")
-            if not w4Done
+            if not w5Done
                 array.push(fut_p, p4), array.push(fut_l, "(4)")
             if not w5Done
                 array.push(fut_p, p5), array.push(fut_l, "(5)")
@@ -1317,7 +1317,7 @@ if barstate.islast
                 int fibStartT = math.max(projStartT, bar_index)
                 for fi = 0 to array.size(fut_l) - 1
                     string wName = array.get(fut_l, fi)
-                    int wPos = fibStartT + (fi + 1) * projOffsetBars
+                    int wPos = (wName == "(2)" or (wName == "(4)" and curMot == 4)) ? bar_index : fibStartT + (fi + 1) * projOffsetBars
                     int wS = wPos
                     int wE = wPos + 1
 
@@ -1418,53 +1418,6 @@ if barstate.islast
                             array.push(_dl, line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1))
                             array.push(_dlab, label.new(wS - 1, tgt, "", color=wFibCol, style=label.style_label_center, textcolor=wFibCol, size=fibLblSz))
                             array.push(_dlab, label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
-
-            // ── W2 retrace targets when W2 pivot is confirmed but W3 not yet started ──
-            // curMot==2: w2Done=true so "(2)" was skipped in fut_l above — draw separately
-            if w1Done and w2Done and not w3Done and showW5Fibs
-                int w2T = bar_index + projOffsetBars
-                float[] w2fp = array.new_float()
-                string[] w2fl = array.new_string()
-                float[] rm2 = array.from(0.382, 0.500, 0.618, 0.786, 0.886)
-                string[] lm2 = array.from("38.2% (Shallow)", "50%", "61.8% (GP)", "78.6%", "88.6% (Deep)")
-                for mi2 = 0 to array.size(rm2) - 1
-                    array.push(w2fp, calcProj(p1, p1, originP, array.get(rm2, mi2), -dir0, useLogScale))
-                    array.push(w2fl, array.get(lm2, mi2))
-                int nW2 = array.size(w2fp)
-                if nW2 > 1
-                    for si2 = 0 to nW2 - 2
-                        for sj2 = 0 to nW2 - 2 - si2
-                            if array.get(w2fp, sj2) > array.get(w2fp, sj2 + 1)
-                                float tmpW2P = array.get(w2fp, sj2)
-                                array.set(w2fp, sj2, array.get(w2fp, sj2 + 1))
-                                array.set(w2fp, sj2 + 1, tmpW2P)
-                                string tmpW2L = array.get(w2fl, sj2)
-                                array.set(w2fl, sj2, array.get(w2fl, sj2 + 1))
-                                array.set(w2fl, sj2 + 1, tmpW2L)
-                int w2AbvI = -1
-                for si2 = 0 to nW2 - 1
-                    if array.get(w2fp, si2) > close
-                        w2AbvI := si2
-                        break
-                int[] w2DrawI = array.new_int()
-                if w2AbvI != -1
-                    for si2 = 1 to 3
-                        if w2AbvI - si2 >= 0
-                            array.push(w2DrawI, w2AbvI - si2)
-                    for si2 = 0 to 2
-                        if w2AbvI + si2 < nW2
-                            array.push(w2DrawI, w2AbvI + si2)
-                else
-                    for si2 = 1 to math.min(6, nW2)
-                        if nW2 - si2 >= 0
-                            array.push(w2DrawI, nW2 - si2)
-                color w2Col = isBull ? color.orange : color.lime
-                for di2 in w2DrawI
-                    float tgt2 = array.get(w2fp, di2)
-                    string lbT2 = array.get(w2fl, di2)
-                    array.push(_dl, line.new(w2T, tgt2, w2T + 1, tgt2, color=color.new(w2Col, 40), style=line.style_dotted, width=1))
-                    array.push(_dlab, label.new(w2T - 1, tgt2, "", color=w2Col, style=label.style_label_center, textcolor=w2Col, size=fibLblSz))
-                    array.push(_dlab, label.new(w2T, tgt2, "W2: " + lbT2 + " (" + str.tostring(tgt2, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=w2Col, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
 
         else
             float pa = aDone ? array.get(local_px, sW3) : calcProj(originP, originP * 1.05, originP, 1.0, dir0, useLogScale)
