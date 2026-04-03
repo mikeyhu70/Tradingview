@@ -76,7 +76,7 @@ projBoxWith    = input.color(color.new(#00BCD4, 0), "Forecast Box (With Trend)",
 projBoxCounter = input.color(color.new(#E91E63, 0), "Forecast Box (Counter Trend)", group="Cosmetics")
 projBoxSzIn    = input.string("Small", "Forecast Box Size", options=["Tiny", "Small", "Normal", "Large"], group="Cosmetics")
 projBoxTransp  = input.int(50, "Forecast Box Transparency", minval=0, maxval=100, group="Cosmetics", tooltip="0 = solid, 100 = fully transparent")
-projOffsetBars = input.int(40, "Forecast Horizontal Offset (Bars)", group="Cosmetics", tooltip="Shifts the projected target boxes left or right to avoid overlapping other indicators.")
+projOffsetBars = input.int(30, "Forecast Horizontal Offset (Bars)", group="Cosmetics", tooltip="Shifts the projected target boxes left or right to avoid overlapping other indicators.")
 
 // --- ATR Label Displacement ---
 atrLen         = input.int(14, "ATR Length for Labels", group="Cosmetics")
