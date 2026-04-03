@@ -1,0 +1,60 @@
+//@version=6
+indicator("True Net Delta Under Candle", overlay = true, max_labels_count = 500)
+
+// Inputs
+ticksPerRow   = input.int(1, "Ticks per footprint row", minval = 1)
+valueAreaPct  = input.int(70, "Value Area %", minval = 1, maxval = 100)
+barsToShow    = input.int(100, "Show labels on last N bars", minval = 1, maxval = 500)
+minAbsDelta   = input.float(0, "Minimum absolute delta to show", minval = 0)
+showZeros     = input.bool(false, "Show zero delta")
+offsetTicks   = input.int(8, "Offset below candle (ticks)", minval = 1)
+textSizeInput = input.string("small", "Text size", options = ["tiny", "small", "normal", "large", "huge"])
+
+// Request native footprint for each bar
+footprint fp = request.footprint(ticksPerRow, valueAreaPct)
+
+// Pull the actual footprint delta
+float netDelta = na
+if not na(fp)
+    netDelta := fp.delta()
+
+// Filters
+recentEnough = bar_index >= math.max(last_bar_index - barsToShow + 1, 0)
+passZero     = showZeros ? true : netDelta != 0
+passMin      = math.abs(netDelta) >= minAbsDelta
+showLabel    = barstate.isconfirmed and not na(netDelta) and recentEnough and passZero and passMin
+
+// Formatting
+labelSize =
+     textSizeInput == "tiny"   ? size.tiny  :
+     textSizeInput == "small"  ? size.small :
+     textSizeInput == "normal" ? size.normal :
+     textSizeInput == "large"  ? size.large :
+     size.huge
+
+txtColor =
+     netDelta > 0 ? color.lime :
+     netDelta < 0 ? color.red :
+     color.gray
+
+y   = low - offsetTicks * syminfo.mintick
+txt = str.tostring(math.round(netDelta), format.volume)
+
+// Draw labels
+var label[] labels = array.new<label>()
+
+if showLabel
+    label lb = label.new(
+         bar_index, y, txt,
+         xloc = xloc.bar_index,
+         yloc = yloc.price,
+         style = label.style_none,
+         textcolor = txtColor,
+         size = labelSize
+     )
+    array.push(labels, lb)
+
+// Cleanup
+while array.size(labels) > barsToShow + 20
+    label old = array.shift(labels)
+    label.delete(old)

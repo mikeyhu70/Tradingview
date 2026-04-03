@@ -2,10 +2,10 @@
 indicator("Mini Elliott Wave 2026-2", overlay=true, max_lines_count=500, max_labels_count=500)
 
 // ─── Inputs ───
-length         = input.int(3, "ZigZag Depth (Base)", minval=2, tooltip="Base ZigZag depth. The optimizer will test this and higher values.")
+length         = input.int(2, "ZigZag Depth (Base)", minval=2, tooltip="Base ZigZag depth. The optimizer will test this and higher values.")
 step           = input.int(1, "Step Size", minval=1, tooltip="Increment for each iteration (e.g., step=2 tests 8, 10, 12...)")
 iterations     = input.int(6, "Iterations", minval=1, maxval=20, tooltip="Number of different depths to test (e.g., 3 iterations with base 8 and step 2 tests depths 8, 10, 12)")
-lookbackSwings = input.int(12, "Lookback Swings (around 10 is optimal)", minval=2)
+lookbackSwings = input.int(14, "Lookback Swings (around 10 is optimal)", minval=2)
 strictEW       = input.bool(true, "Strict EW Rules", tooltip="If true, forces A-B-C labeling if standard EW rules are broken.")
 showOptDebug   = input.bool(false, "Show Optimization Debug", tooltip="Shows which ZigZag depth was selected and why.")
 
@@ -1563,24 +1563,25 @@ if barstate.islast
                         bool isRetrace = (wName == "(2)" or wName == "(4)" or wName == "A" or wName == "B")
                         int starIdx = -1
                         if isRetrace
-                            // Shallowest (lowest fib%) not yet broken
-                            // Bullish retrace: scan forward through ascending prices,
-                            //   keep last level where close > level (shallowest not broken)
-                            // Bearish retrace: scan backward, keep last level where close < level
+                            // Scan from shallowest to deepest, pick first not broken
+                            // Bullish: shallowest = highest price (end of sorted array), broken = close < level
+                            // Bearish: shallowest = lowest price (start of sorted array), broken = close > level
                             if dir0 > 0
                                 starIdx := 0  // default to deepest if all broken
-                                for si = 0 to nF - 1
+                                for si = nF - 1 to 0
                                     if close > array.get(wFibP, si)
                                         starIdx := si
+                                        break
                             else
                                 starIdx := nF - 1  // default to deepest if all broken
                                 for si = 0 to nF - 1
                                     if close < array.get(wFibP, si)
                                         starIdx := si
+                                        break
                         else
-                            // Lowest extension, cascade up when broken
-                            // Bullish: first level above close
-                            // Bearish: first level below close (scan forward, keep last where close > level)
+                            // Extensions: start at lowest, cascade up when broken
+                            // Bullish: lowest = smallest price (start of sorted), broken = close > level
+                            // Bearish: lowest = highest price (end of sorted), broken = close < level
                             if dir0 > 0
                                 starIdx := nF - 1  // default to highest if all broken
                                 for si = 0 to nF - 1
@@ -1589,9 +1590,10 @@ if barstate.islast
                                         break
                             else
                                 starIdx := 0  // default to lowest if all broken
-                                for si = 0 to nF - 1
+                                for si = nF - 1 to 0
                                     if close > array.get(wFibP, si)
                                         starIdx := si
+                                        break
                         array.set(wFibL, starIdx, array.get(wFibL, starIdx) + " (*)")
                         float starVal = array.get(wFibP, starIdx)
                         if wName == "(1)"
