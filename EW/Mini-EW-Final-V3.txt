@@ -1159,7 +1159,8 @@ if barstate.islast
                 p5 := selectNearest4(t5_a, t5_b, t5_c, t5_d, close, dir0)
 
             // ── W3 fib targets: extension targets from W2 using W1 as reference ──
-            if w2Done and showW5Fibs
+            // Only show when W3 is the current or next wave (hide once W4+ confirmed)
+            if w2Done and not w4Done and showW5Fibs
                 float[] w3AllP = array.new_float()
                 string[] w3AllL = array.new_string()
 
@@ -1203,9 +1204,24 @@ if barstate.islast
                         if nW3 - i >= 0
                             array.push(w3Draw, nW3 - i)
 
-                int w3C = w3Done ? array.get(local_pt, sW3) : array.get(local_pt, sW2) + fibOffsetBars
+                // Position W3 fibs near the "(3)" projection box
+                int w3StepsAhead = (w1Done and not w2Done ? 1 : 0) + (w2Done and not w3Done ? 1 : 0)
+                int w3AnchorT = w2Done ? array.get(local_pt, sW2) : (w1Done ? array.get(local_pt, sW1) : bar_index)
+                int w3C = w3Done ? array.get(local_pt, sW3) : math.max(w3AnchorT, bar_index) + math.max(w3StepsAhead, 1) * projOffsetBars
                 int w3S = w3C
                 int w3E = w3C + 1
+                // Mark active W3 fib used for W4 calculation with (*)
+                if not w4Done
+                    float w3BestDist = 1e18
+                    int w3BestIdx = -1
+                    for si = 0 to nW3 - 1
+                        float d = math.abs(array.get(w3AllP, si) - p3)
+                        if d < w3BestDist
+                            w3BestDist := d
+                            w3BestIdx := si
+                    if w3BestIdx >= 0
+                        array.set(w3AllL, w3BestIdx, array.get(w3AllL, w3BestIdx) + " (*)")
+
                 color w3FibCol = isBull ? color.aqua : color.fuchsia
                 for idx in w3Draw
                     float tgt3 = array.get(w3AllP, idx)
@@ -1280,9 +1296,23 @@ if barstate.islast
 
                 // Draw the selected fib lines
                 // When projecting, position relative to W4 (matches drawProjectionLines origin)
-                int w5C = w5Done ? array.get(local_pt, sW5) : (w4Done ? array.get(local_pt, sW4) + projOffsetBars : (w3Done ? array.get(local_pt, sW3) + projOffsetBars : bar_index + projOffsetBars))
+                // Position W5 fibs near the "(5)" projection box
+                int w5StepsAhead = (not w3Done ? 1 : 0) + (not w4Done ? 1 : 0) + 1
+                int w5AnchorT = w4Done ? array.get(local_pt, sW4) : (w3Done ? array.get(local_pt, sW3) : (w2Done ? array.get(local_pt, sW2) : bar_index))
+                int w5C = w5Done ? array.get(local_pt, sW5) : math.max(w5AnchorT, bar_index) + w5StepsAhead * projOffsetBars
                 int w5S = w5C
                 int w5E = w5C + 1
+                // Mark active W5 fib with (*)
+                float w5BestDist = 1e18
+                int w5BestIdx = -1
+                for si = 0 to nW5 - 1
+                    float d = math.abs(array.get(w5AllP, si) - p5)
+                    if d < w5BestDist
+                        w5BestDist := d
+                        w5BestIdx := si
+                if w5BestIdx >= 0
+                    array.set(w5AllL, w5BestIdx, array.get(w5AllL, w5BestIdx) + " (*)")
+
                 color w5Col = isBull ? color.lime : color.orange
                 for idx in w5Draw
                     float tgt = array.get(w5AllP, idx)
@@ -1443,7 +1473,7 @@ if barstate.islast
                 int fibStartT = math.max(projStartT, bar_index)
                 for fi = 0 to array.size(fut_l) - 1
                     string wName = array.get(fut_l, fi)
-                    int wPos = (wName == "(2)" or wName == "(4)") ? bar_index : fibStartT + (fi + 1) * projOffsetBars
+                    int wPos = fibStartT + (fi + 1) * projOffsetBars
                     int wS = wPos
                     int wE = wPos + 1
 
@@ -1453,16 +1483,20 @@ if barstate.islast
                     float[] wFibP = array.new_float()
                     string[] wFibL = array.new_string()
                     color wFibCol = color.gray
+                    // Active fib: the level used as base for the next wave's calculation
+                    // W1/A = exceptions (no active marker)
+                    float activeP = na
 
                     if wName == "(2)"
-                        // W2: retrace of W1 — 38.2% (shallow/bullish), 50%, 61.8% (Golden Pocket), 78.6%-88.6% (deep)
-                        // W2 cannot retrace more than 100% of W1 (invalidation level)
+                        // W2: retrace of W1 — 38.2%, 50%, 61.8% (GP), 78.6%, 88.6% (deep)
                         float[] rm = array.from(0.382, 0.500, 0.618, 0.786, 0.886)
                         string[] lm = array.from("38.2% (Shallow)", "50%", "61.8% (GP)", "78.6%", "88.6% (Deep)")
                         for mi = 0 to array.size(rm) - 1
                             array.push(wFibP, calcProj(p1, p1, originP, array.get(rm, mi), -dir0, useLogScale))
                             array.push(wFibL, array.get(lm, mi))
                         wFibCol := isBull ? color.orange : color.lime
+                        if not w3Done
+                            activeP := p2
 
                     else if wName == "(3)"
                         // W3: extension of W1 from W2 — 1.618x primary, extended to 4.618x
@@ -1471,6 +1505,8 @@ if barstate.islast
                             array.push(wFibP, calcProj(p2, p1, originP, m, dir0, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
                         wFibCol := isBull ? color.lime : color.orange
+                        if not w4Done
+                            activeP := p3
 
                     else if wName == "(4)"
                         // W4: retrace of W3 — use nearest W3 fib target as base
@@ -1487,6 +1523,8 @@ if barstate.islast
                             array.push(wFibP, calcProj(w4BaseF, w4BaseF, p2, m, -dir0, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
                         wFibCol := isBull ? color.orange : color.lime
+                        if not w5Done
+                            activeP := p4
 
                     else if wName == "A"
                         // A: retrace of impulse — multiple targets (exception: shows all)
@@ -1508,6 +1546,8 @@ if barstate.islast
                             array.push(wFibP, calcProj(bBaseF, p5, bBaseF, m, dir0, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
                         wFibCol := projBoxWith
+                        if w5Done
+                            activeP := pb
 
                     else if wName == "C"
                         // C: use nearest A→B chain as base
@@ -1525,6 +1565,8 @@ if barstate.islast
                             array.push(wFibP, calcProj(cBaseF, p5, cABase, m, -dir0, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
                         wFibCol := projBoxCounter
+                        if w5Done
+                            activeP := pc
 
                     // Sort, filter to nearby, draw
                     int nF = array.size(wFibP)
@@ -1539,6 +1581,18 @@ if barstate.islast
                                         string tmpL2 = array.get(wFibL, sj)
                                         array.set(wFibL, sj, array.get(wFibL, sj + 1))
                                         array.set(wFibL, sj + 1, tmpL2)
+
+                        // Mark the active fib used for next wave's calculation with (*)
+                        if not na(activeP)
+                            float bestDist = 1e18
+                            int bestIdx = -1
+                            for si = 0 to nF - 1
+                                float d = math.abs(array.get(wFibP, si) - activeP)
+                                if d < bestDist
+                                    bestDist := d
+                                    bestIdx := si
+                            if bestIdx >= 0
+                                array.set(wFibL, bestIdx, array.get(wFibL, bestIdx) + " (*)")
 
                         int abvI = -1
                         for si = 0 to nF - 1
