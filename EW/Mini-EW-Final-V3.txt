@@ -138,6 +138,75 @@ calcProj(baseP, refA, refB, mult, dir, isLog) =>
     else
         baseP + dir * (math.abs(refA - refB) * mult)
 
+// ─── Nearest-target cascade helpers ───
+// Select level among up to 4 candidates: pick nearest that price hasn't broken, cascade if broken
+// dir0 > 0 (bull): price breaks UP → close > level triggers next
+// dir0 < 0 (bear): price breaks DOWN → close < level triggers next
+selectNearest4(float a, float b, float c, float d, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+        if cl > c
+            sel := d
+    else
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+        if cl < c
+            sel := d
+    sel
+
+// Same but for counter-trend (retrace): bull retraces DOWN, bear retraces UP
+selectNearestRetrace4(float a, float b, float c, float d, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+        if cl < c
+            sel := d
+    else
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+        if cl > c
+            sel := d
+    sel
+
+selectNearest3(float a, float b, float c, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+    else
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+    sel
+
+selectNearestRetrace3(float a, float b, float c, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+    else
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+    sel
+
 // ─── Drawing Functions ───
 drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCounter, boxSz, macroIsBull, hOffset, line[] dl, label[] dlab) =>
     simP = startP
@@ -1006,92 +1075,147 @@ if barstate.islast
         if isValidMotive
             float p1 = w1Done ? array.get(local_px, sW1) : calcProj(originP, originP * 1.05, originP, 1.0, dir0, useLogScale)
 
+            // W2: retrace of W1 — 38.2%, 50%, 61.8% (GP), 78.6%, 88.6% (deep)
             float p2 = originP
             if w2Done
                 p2 := array.get(local_px, sW2)
             else if w1Done
-                // W2 retracement targets: 38.2% (shallow/bullish) → 50% → 61.8% (GP) → 78.6% → 88.6% (deep)
-                // W2 cannot retrace more than 100% of W1
-                float t2_382 = calcProj(p1, p1, originP, 0.382, -dir0, useLogScale)
-                float t2_500 = calcProj(p1, p1, originP, 0.500, -dir0, useLogScale)
-                float t2_618 = calcProj(p1, p1, originP, 0.618, -dir0, useLogScale)
-                float t2_786 = calcProj(p1, p1, originP, 0.786, -dir0, useLogScale)
-                float t2_886 = calcProj(p1, p1, originP, 0.886, -dir0, useLogScale)
-                p2 := t2_382
+                float t2_a = calcProj(p1, p1, originP, 0.382, -dir0, useLogScale)
+                float t2_b = calcProj(p1, p1, originP, 0.500, -dir0, useLogScale)
+                float t2_c = calcProj(p1, p1, originP, 0.618, -dir0, useLogScale)
+                float t2_d = calcProj(p1, p1, originP, 0.786, -dir0, useLogScale)
+                float t2_e = calcProj(p1, p1, originP, 0.886, -dir0, useLogScale)
+                p2 := t2_a
                 if dir0 > 0
-                    if close < t2_382
-                        p2 := t2_500
-                    if close < t2_500
-                        p2 := t2_618
-                    if close < t2_618
-                        p2 := t2_786
-                    if close < t2_786
-                        p2 := t2_886
+                    if close < t2_a
+                        p2 := t2_b
+                    if close < t2_b
+                        p2 := t2_c
+                    if close < t2_c
+                        p2 := t2_d
+                    if close < t2_d
+                        p2 := t2_e
                 else
-                    if close > t2_382
-                        p2 := t2_500
-                    if close > t2_500
-                        p2 := t2_618
-                    if close > t2_618
-                        p2 := t2_786
-                    if close > t2_786
-                        p2 := t2_886
+                    if close > t2_a
+                        p2 := t2_b
+                    if close > t2_b
+                        p2 := t2_c
+                    if close > t2_c
+                        p2 := t2_d
+                    if close > t2_d
+                        p2 := t2_e
 
+            // W3: 1.618x W1 from W2 (primary), extended 2.618x, 3.618x, 4.618x
             float p3 = originP
             if w3Done
                 p3 := array.get(local_px, sW3)
-            else if w2Done
-                float t3_161 = calcProj(p2, p1, originP, w3ExtMult, dir0, useLogScale)
-                float t3_261 = calcProj(p2, p1, originP, w3ExtMult + 1.0, dir0, useLogScale)
-                float t3_361 = calcProj(p2, p1, originP, w3ExtMult + 2.0, dir0, useLogScale)
-                p3 := t3_161
-                if dir0 > 0
-                    if close > t3_161
-                        p3 := t3_261
-                    if close > t3_261
-                        p3 := t3_361
-                else
-                    if close < t3_161
-                        p3 := t3_261
-                    if close < t3_261
-                        p3 := t3_361
+            else if w2Done or w1Done
+                float t3_a = calcProj(p2, p1, originP, 1.618, dir0, useLogScale)
+                float t3_b = calcProj(p2, p1, originP, 2.618, dir0, useLogScale)
+                float t3_c = calcProj(p2, p1, originP, 3.618, dir0, useLogScale)
+                float t3_d = calcProj(p2, p1, originP, 4.618, dir0, useLogScale)
+                p3 := selectNearest4(t3_a, t3_b, t3_c, t3_d, close, dir0)
 
+            // W4 base: nearest W3 fib target for W4 retrace calculation
+            float w4Base = calcProj(p2, p1, originP, 1.618, dir0, useLogScale)
             float p4 = originP
             if w4Done
                 p4 := array.get(local_px, sW4)
-            else if w3Done
-                float t4_382 = calcProj(p3, p3, p2, 0.382, -dir0, useLogScale)
-                float t4_500 = calcProj(p3, p3, p2, 0.500, -dir0, useLogScale)
-                float t4_618 = calcProj(p3, p3, p2, 0.618, -dir0, useLogScale)
-                p4 := t4_382
-                if dir0 > 0
-                    if close < t4_382
-                        p4 := t4_500
-                    if close < t4_500
-                        p4 := t4_618
-                else
-                    if close > t4_382
-                        p4 := t4_500
-                    if close > t4_500
-                        p4 := t4_618
+            else if w3Done or w2Done or w1Done
+                // Select nearest W3 target for W4 base (1.618x, 2.618x, 3.618x, 4.618x)
+                float w3t_a = calcProj(p2, p1, originP, 1.618, dir0, useLogScale)
+                float w3t_b = calcProj(p2, p1, originP, 2.618, dir0, useLogScale)
+                float w3t_c = calcProj(p2, p1, originP, 3.618, dir0, useLogScale)
+                float w3t_d = calcProj(p2, p1, originP, 4.618, dir0, useLogScale)
+                w4Base := selectNearest4(w3t_a, w3t_b, w3t_c, w3t_d, close, dir0)
+                if w3Done
+                    w4Base := dir0 > 0 ? math.max(w4Base, p3) : math.min(w4Base, p3)
+                // W4 retrace from selected W3 target back toward W2
+                float t4_a = calcProj(w4Base, w4Base, p2, 0.236, -dir0, useLogScale)
+                float t4_b = calcProj(w4Base, w4Base, p2, 0.382, -dir0, useLogScale)
+                float t4_c = calcProj(w4Base, w4Base, p2, 0.500, -dir0, useLogScale)
+                float t4_d = calcProj(w4Base, w4Base, p2, 0.618, -dir0, useLogScale)
+                p4 := selectNearestRetrace4(t4_a, t4_b, t4_c, t4_d, close, dir0)
 
+            // W5: extension from nearest W4 target
+            // Targets: 61.8% W1, W5=W1 (primary), 61.8% W1-3, 161.8% W3, 161.8% W1-3
             float p5 = originP
             if w5Done
                 p5 := array.get(local_px, sW5)
-            else if w4Done
-                // Main box at W5 = W1, step to extended if price passes
-                float t5_w1eq  = calcProj(p4, p1, originP, 1.0, dir0, useLogScale)
-                float t5_161w3 = calcProj(p4, p3, p2, 1.618, dir0, useLogScale)
-                p5 := t5_w1eq
-                if dir0 > 0
-                    if close > t5_w1eq
-                        p5 := t5_161w3
+            else if w4Done or w3Done or w2Done or w1Done
+                // Select nearest W4 retrace target as W5 base
+                float w4t_a = calcProj(w4Base, w4Base, p2, 0.236, -dir0, useLogScale)
+                float w4t_b = calcProj(w4Base, w4Base, p2, 0.382, -dir0, useLogScale)
+                float w4t_c = calcProj(w4Base, w4Base, p2, 0.500, -dir0, useLogScale)
+                float w4t_d = calcProj(w4Base, w4Base, p2, 0.618, -dir0, useLogScale)
+                float w5Base = selectNearestRetrace4(w4t_a, w4t_b, w4t_c, w4t_d, close, dir0)
+                if w4Done
+                    w5Base := dir0 > 0 ? math.min(w5Base, p4) : math.max(w5Base, p4)
+                // W5 targets from selected W4 base — cascade through standard EW levels
+                float t5_a = calcProj(w5Base, p1, originP, 0.618, dir0, useLogScale)  // 61.8% W1
+                float t5_b = calcProj(w5Base, p1, originP, 1.0, dir0, useLogScale)    // 100% W1 (W5=W1)
+                float t5_c = calcProj(w5Base, p3, originP, 0.618, dir0, useLogScale)  // 61.8% W1-3
+                float t5_d = calcProj(w5Base, p3, p2, 1.618, dir0, useLogScale)       // 161.8% W3
+                p5 := selectNearest4(t5_a, t5_b, t5_c, t5_d, close, dir0)
+
+            // ── W3 fib targets: extension targets from W2 using W1 as reference ──
+            if w2Done and showW5Fibs
+                float[] w3AllP = array.new_float()
+                string[] w3AllL = array.new_string()
+
+                float[] w3Mults = array.from(1.0, 1.618, 2.0, 2.618, 3.0, 3.618, 4.0, 4.236, 4.618)
+                string[] w3Names = array.from("100% W1", "161.8% W1", "200% W1", "261.8% W1", "300% W1", "361.8% W1", "400% W1", "423.6% W1", "461.8% W1")
+                for i = 0 to array.size(w3Mults) - 1
+                    float tgt = calcProj(p2, p1, originP, array.get(w3Mults, i), dir0, useLogScale)
+                    array.push(w3AllP, tgt)
+                    array.push(w3AllL, array.get(w3Names, i))
+
+                int nW3 = array.size(w3AllP)
+                if nW3 > 1
+                    for i = 0 to nW3 - 2
+                        for j = 0 to nW3 - 2 - i
+                            if array.get(w3AllP, j) > array.get(w3AllP, j + 1)
+                                float tmpP = array.get(w3AllP, j)
+                                array.set(w3AllP, j, array.get(w3AllP, j + 1))
+                                array.set(w3AllP, j + 1, tmpP)
+                                string tmpL = array.get(w3AllL, j)
+                                array.set(w3AllL, j, array.get(w3AllL, j + 1))
+                                array.set(w3AllL, j + 1, tmpL)
+
+                float w3Ref = w3Done ? p3 : close
+
+                int abvIdx3 = -1
+                for i = 0 to nW3 - 1
+                    if array.get(w3AllP, i) > w3Ref
+                        abvIdx3 := i
+                        break
+
+                int[] w3Draw = array.new_int()
+                if abvIdx3 != -1
+                    for i = 1 to 3
+                        if abvIdx3 - i >= 0
+                            array.push(w3Draw, abvIdx3 - i)
+                    for i = 0 to 2
+                        if abvIdx3 + i < nW3
+                            array.push(w3Draw, abvIdx3 + i)
                 else
-                    if close < t5_w1eq
-                        p5 := t5_161w3
+                    for i = 1 to 6
+                        if nW3 - i >= 0
+                            array.push(w3Draw, nW3 - i)
+
+                int w3C = w3Done ? array.get(local_pt, sW3) : array.get(local_pt, sW2) + fibOffsetBars
+                int w3S = w3C
+                int w3E = w3C + 1
+                color w3FibCol = isBull ? color.aqua : color.fuchsia
+                for idx in w3Draw
+                    float tgt3 = array.get(w3AllP, idx)
+                    string lbTxt3 = array.get(w3AllL, idx)
+                    array.push(_dl, line.new(w3S, tgt3, w3E, tgt3, color=color.new(w3FibCol, 40), style=line.style_dotted, width=1))
+                    array.push(_dlab, label.new(w3S - 1, tgt3, "", color=w3FibCol, style=label.style_label_center, textcolor=w3FibCol, size=fibLblSz))
+                    array.push(_dlab, label.new(w3S, tgt3, "W3: " + lbTxt3 + " (" + str.tostring(tgt3, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=w3FibCol, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
 
             // ── W5 fib targets: full set with extensions, show only near W5 ──
-            if w4Done and showW5Fibs
+            if (w4Done or w3Done) and showW5Fibs
                 // Build all W5 targets
                 float[] w5AllP = array.new_float()
                 string[] w5AllL = array.new_string()
@@ -1156,7 +1280,7 @@ if barstate.islast
 
                 // Draw the selected fib lines
                 // When projecting, position relative to W4 (matches drawProjectionLines origin)
-                int w5C = w5Done ? array.get(local_pt, sW5) : (w4Done ? array.get(local_pt, sW4) + projOffsetBars : bar_index + projOffsetBars)
+                int w5C = w5Done ? array.get(local_pt, sW5) : (w4Done ? array.get(local_pt, sW4) + projOffsetBars : (w3Done ? array.get(local_pt, sW3) + projOffsetBars : bar_index + projOffsetBars))
                 int w5S = w5C
                 int w5E = w5C + 1
                 color w5Col = isBull ? color.lime : color.orange
@@ -1245,23 +1369,24 @@ if barstate.islast
                 else
                     pa := math.max(pa, close)
 
-                // ─── Wave B: 1st zigzag target (50% retrace of A) ───
-                // B is a future event — place at nearest target, fib lines show alternatives
-                pb := calcProj(pa, p5, pa, 0.500, dir0, useLogScale)
-                // Clamp B: cannot exceed Wave 5
-                if dir0 > 0
-                    pb := math.min(pb, p5)
-                else
-                    pb := math.max(pb, p5)
+                // ─── Wave B: use nearest A target as base, cascade B retrace ───
+                float bBase_a = calcProj(p5, p5, originP, 0.382, -dir0, useLogScale)
+                float bBase_b = calcProj(p5, p5, originP, 0.500, -dir0, useLogScale)
+                float bBase_c = calcProj(p5, p5, originP, 0.618, -dir0, useLogScale)
+                float bBase = selectNearestRetrace3(bBase_a, bBase_b, bBase_c, close, dir0)
+                bBase := dir0 > 0 ? math.min(bBase, pa) : math.max(bBase, pa)
+                // B retrace targets from nearest A
+                float bt_a = calcProj(bBase, p5, bBase, 0.500, dir0, useLogScale)
+                float bt_b = calcProj(bBase, p5, bBase, 0.618, dir0, useLogScale)
+                float bt_c = calcProj(bBase, p5, bBase, 0.764, dir0, useLogScale)
+                pb := selectNearest3(bt_a, bt_b, bt_c, close, dir0)
 
-                // ─── Wave C: 1st impulse retrace target (38.2%) ───
-                // C ends where the overall correction settles — fib lines show alternatives
-                pc := calcProj(p5, p5, originP, 0.382, -dir0, useLogScale)
-                // Clamp C: cannot break past origin
-                if dir0 > 0
-                    pc := math.max(pc, originP)
-                else
-                    pc := math.min(pc, originP)
+                // ─── Wave C: use nearest B target as base, cascade C extension ───
+                float cBase = selectNearest3(bt_a, bt_b, bt_c, close, dir0)
+                float ct_a = calcProj(cBase, p5, bBase, 0.618, -dir0, useLogScale)
+                float ct_b = calcProj(cBase, p5, bBase, 1.0, -dir0, useLogScale)
+                float ct_c = calcProj(cBase, p5, bBase, 1.618, -dir0, useLogScale)
+                pc := selectNearestRetrace3(ct_a, ct_b, ct_c, close, dir0)
 
             if not w1Done
                 fibPoint1 := originP, fibPoint2 := p1, fibPoint3 := originP, isDown := dir0 < 0
@@ -1269,18 +1394,19 @@ if barstate.islast
 
             if not w1Done
                 array.push(fut_p, p1), array.push(fut_l, "(1)")
-            if not w3Done
+            if not w2Done
                 array.push(fut_p, p2), array.push(fut_l, "(2)")
             if not w3Done
                 array.push(fut_p, p3), array.push(fut_l, "(3)")
-            if not w5Done
+            if not w4Done
                 array.push(fut_p, p4), array.push(fut_l, "(4)")
             if not w5Done
                 array.push(fut_p, p5), array.push(fut_l, "(5)")
 
-            array.push(fut_p, pa), array.push(fut_l, "A")
-            array.push(fut_p, pb), array.push(fut_l, "B")
-            array.push(fut_p, pc), array.push(fut_l, "C")
+            if w5Done
+                array.push(fut_p, pa), array.push(fut_l, "A")
+                array.push(fut_p, pb), array.push(fut_l, "B")
+                array.push(fut_p, pc), array.push(fut_l, "C")
 
             // ═══════════════════════════════════════════════════════════════
             // ROLLING FIB TARGETS — W2, W3, W4, A, B, C
@@ -1317,7 +1443,7 @@ if barstate.islast
                 int fibStartT = math.max(projStartT, bar_index)
                 for fi = 0 to array.size(fut_l) - 1
                     string wName = array.get(fut_l, fi)
-                    int wPos = (wName == "(2)" or (wName == "(4)" and curMot == 4)) ? bar_index : fibStartT + (fi + 1) * projOffsetBars
+                    int wPos = (wName == "(2)" or wName == "(4)") ? bar_index : fibStartT + (fi + 1) * projOffsetBars
                     int wS = wPos
                     int wE = wPos + 1
 
@@ -1339,23 +1465,31 @@ if barstate.islast
                         wFibCol := isBull ? color.orange : color.lime
 
                     else if wName == "(3)"
-                        // W3: extension of W1 from W2
-                        float[] rm = array.from(1.0, 1.618, 2.0, 2.236, 2.618, 3.0, 3.236, 3.618, 4.0)
+                        // W3: extension of W1 from W2 — 1.618x primary, extended to 4.618x
+                        float[] rm = array.from(1.0, 1.618, 2.0, 2.618, 3.0, 3.236, 3.618, 4.0, 4.236, 4.618)
                         for m in rm
                             array.push(wFibP, calcProj(p2, p1, originP, m, dir0, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
                         wFibCol := isBull ? color.lime : color.orange
 
                     else if wName == "(4)"
-                        // W4: retrace of W3 — 23.6%, 38.2%, 50%, 61.8%, 76.8%
-                        float[] rm = array.from(0.236, 0.382, 0.500, 0.618, 0.768)
+                        // W4: retrace of W3 — use nearest W3 fib target as base
+                        // Typical 23.6%-38.2%, deep 50%-61.8%
+                        float w3fa = calcProj(p2, p1, originP, 1.618, dir0, useLogScale)
+                        float w3fb = calcProj(p2, p1, originP, 2.618, dir0, useLogScale)
+                        float w3fc = calcProj(p2, p1, originP, 3.618, dir0, useLogScale)
+                        float w3fd = calcProj(p2, p1, originP, 4.618, dir0, useLogScale)
+                        float w4BaseF = selectNearest4(w3fa, w3fb, w3fc, w3fd, close, dir0)
+                        if w3Done
+                            w4BaseF := dir0 > 0 ? math.max(w4BaseF, p3) : math.min(w4BaseF, p3)
+                        float[] rm = array.from(0.236, 0.382, 0.500, 0.618)
                         for m in rm
-                            array.push(wFibP, calcProj(p3, p3, p2, m, -dir0, useLogScale))
+                            array.push(wFibP, calcProj(w4BaseF, w4BaseF, p2, m, -dir0, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
                         wFibCol := isBull ? color.orange : color.lime
 
                     else if wName == "A"
-                        // A: retrace of impulse — 38.2%, 50%, 61.8%, 76.8%
+                        // A: retrace of impulse — multiple targets (exception: shows all)
                         float[] rm = array.from(0.382, 0.500, 0.618, 0.768)
                         for m in rm
                             array.push(wFibP, calcProj(p5, p5, originP, m, -dir0, useLogScale))
@@ -1363,20 +1497,33 @@ if barstate.islast
                         wFibCol := projBoxCounter
 
                     else if wName == "B"
-                        // B: retrace of A move — 50%, 61.8%, 76.4%, 85.4%, 100%, 123.6% (expanded flat)
+                        // B: use nearest A target as base
+                        float aFa = calcProj(p5, p5, originP, 0.382, -dir0, useLogScale)
+                        float aFb = calcProj(p5, p5, originP, 0.500, -dir0, useLogScale)
+                        float aFc = calcProj(p5, p5, originP, 0.618, -dir0, useLogScale)
+                        float bBaseF = selectNearestRetrace3(aFa, aFb, aFc, close, dir0)
+                        bBaseF := dir0 > 0 ? math.min(bBaseF, pa) : math.max(bBaseF, pa)
                         float[] rm = array.from(0.500, 0.618, 0.764, 0.854, 1.0, 1.236)
                         for m in rm
-                            float bTgt = calcProj(pa, p5, pa, m, dir0, useLogScale)
-                            array.push(wFibP, bTgt)
+                            array.push(wFibP, calcProj(bBaseF, p5, bBaseF, m, dir0, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
                         wFibCol := projBoxWith
 
                     else if wName == "C"
-                        // C: retrace of impulse + extended sequence
-                        float[] rm = array.from(0.382, 0.500, 0.618, 0.768, 1.0, 1.236, 1.618, 2.0, 2.236, 2.618, 3.0, 3.236, 3.618, 4.0)
+                        // C: use nearest A→B chain as base
+                        float caFa = calcProj(p5, p5, originP, 0.382, -dir0, useLogScale)
+                        float caFb = calcProj(p5, p5, originP, 0.500, -dir0, useLogScale)
+                        float caFc = calcProj(p5, p5, originP, 0.618, -dir0, useLogScale)
+                        float cABase = selectNearestRetrace3(caFa, caFb, caFc, close, dir0)
+                        cABase := dir0 > 0 ? math.min(cABase, pa) : math.max(cABase, pa)
+                        float cbFa = calcProj(cABase, p5, cABase, 0.500, dir0, useLogScale)
+                        float cbFb = calcProj(cABase, p5, cABase, 0.618, dir0, useLogScale)
+                        float cbFc = calcProj(cABase, p5, cABase, 0.764, dir0, useLogScale)
+                        float cBaseF = selectNearest3(cbFa, cbFb, cbFc, close, dir0)
+                        float[] rm = array.from(0.618, 1.0, 1.236, 1.618, 2.0, 2.618)
                         for m in rm
-                            array.push(wFibP, calcProj(p5, p5, originP, m, -dir0, useLogScale))
-                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                            array.push(wFibP, calcProj(cBaseF, p5, cABase, m, -dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
                         wFibCol := projBoxCounter
 
                     // Sort, filter to nearby, draw
@@ -1640,6 +1787,14 @@ if barstate.islast
                         for m in rm
                             array.push(wFibP, calcProj(opp4, opp1, pc, m, dirOpp, useLogScale))
                             array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x W1")
+                        // 161.8% of W3 from W4
+                        array.push(wFibP, calcProj(opp4, opp3, opp2, 1.618, dirOpp, useLogScale))
+                        array.push(wFibL, "161.8% W3")
+                        // 61.8% and 161.8% of W1-3 net distance from W4
+                        array.push(wFibP, calcProj(opp4, opp3, pc, 0.618, dirOpp, useLogScale))
+                        array.push(wFibL, "61.8% W1-3")
+                        array.push(wFibP, calcProj(opp4, opp3, pc, 1.618, dirOpp, useLogScale))
+                        array.push(wFibL, "161.8% W1-3")
                         wFibCol := not isBull ? color.lime : color.orange
 
                     int nF = array.size(wFibP)
