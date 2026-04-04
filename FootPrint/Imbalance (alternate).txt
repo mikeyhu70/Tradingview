@@ -1,0 +1,187 @@
+//@version=6
+indicator("Footprint Imbalance Delta", overlay = true, max_labels_count = 500)
+
+// --- Inputs --------------------------------------------------------------
+ticksPerRow      = input.int(1, "Ticks per footprint row", minval = 1)
+valueAreaPct     = input.int(70, "Value Area %", minval = 1, maxval = 100)
+barsToShow       = input.int(1, "Show labels on last N bars", minval = 1, maxval = 500)
+
+// Imbalance Settings
+imbalanceFactor  = input.float(1.5, "Imbalance multiplier", minval = 1.0)
+imbMethod        = input.string("Diagonal Primary", "Imbalance Calculation Priority", options = ["Diagonal Primary", "Across (Horizontal) Primary", "Diagonal Only", "Across Only"])
+minAbsImbalance  = input.float(50, "Min absolute imbalance delta to show", minval = 0)
+showZeros        = input.bool(false, "Show zero imbalance delta")
+
+// Display & Styling
+textSizeInput    = input.string("normal", "Text size", options = ["tiny", "small", "normal", "large", "huge"])
+deltaPosColor    = input.color(color.lime,  "Buy color")
+deltaNegColor    = input.color(color.rgb(233, 108, 162),   "Sell color")
+deltaZeroColor   = input.color(color.gray,  "Delta neutral color")
+swingInProgressColor = input.color(color.white, "SI~ color")
+displayMode      = input.string("Delta only", "Display mode", options = ["All", "Delta only"])
+
+// ATR-based displacement
+atrMultiplier    = input.float(1.5, "ATR displacement multiplier", minval = 0.1)
+lineGapFactor    = input.float(0.20, "Label line gap (ATR fraction)", minval = 0.001, step = 0.01)
+useATR           = input.bool(true, "Use ATR for spacing (vs fixed ticks)")
+offsetTicks      = input.int(3, "Tick spacing (when ATR off)", minval = 1)
+atrLength        = input.int(14, "ATR length", minval = 1)
+
+// Swing imbalance
+swingLen             = input.int(4, "Swing length", minval = 1)
+showSwing            = input.bool(true, "Show swing delta")
+swingsToShow         = input.int(40, "Number of swings to show", minval = 1)
+swingAtrMultiplier   = input.float(0.1, "Swing ATR displacement multiplier", minval = 0.1)
+
+// --- Formatting Function (K/M Suffixes) ----------------------------------
+fmt(val) =>
+    absVal = math.abs(val)
+    absVal >= 1000000 ? str.tostring(val / 1000000.0, "#.0") + "M" : 
+     absVal >= 1000    ? str.tostring(val / 1000.0, "#.0") + "K" : 
+     str.tostring(math.round(val))
+
+// --- Core Logic ----------------------------------------------------------
+footprint fp = request.footprint(ticksPerRow, valueAreaPct)
+float atrMa = ta.atr(atrLength)
+
+float barBuyImb  = 0.0
+float barSellImb = 0.0
+
+if not na(fp)
+    array<volume_row> rows = fp.rows()
+    rowCount = array.size(rows)
+
+    if rowCount > 0
+        for i = 0 to rowCount - 1
+            volume_row row = array.get(rows, i)
+            float askVol   = row.buy_volume()
+            float bidVol   = row.sell_volume()
+
+            bool hasLower = i > 0
+            bool hasUpper = i < rowCount - 1
+            float lowerBid = hasLower ? array.get(rows, i - 1).sell_volume() : 0.0
+            float upperAsk = hasUpper ? array.get(rows, i + 1).buy_volume()  : 0.0
+
+            // Imbalance Triggers
+            bool diagBuyTrigger   = hasLower and lowerBid > 0 and askVol >= lowerBid * imbalanceFactor
+            bool diagSellTrigger  = hasUpper and upperAsk > 0 and bidVol >= upperAsk * imbalanceFactor
+            bool acrossBuyTrigger = askVol >= bidVol * imbalanceFactor
+            bool acrossSellTrigger= bidVol >= askVol * imbalanceFactor
+
+            bool buyCounted  = false
+            bool sellCounted = false
+
+            // PRIORITY LOGIC: Using the "Diff" (Aggressive - Passive)
+            if imbMethod == "Diagonal Primary"
+                if diagBuyTrigger
+                    barBuyImb += (askVol - lowerBid)
+                    buyCounted := true
+                if not buyCounted and acrossBuyTrigger
+                    barBuyImb += (askVol - bidVol)
+                
+                if diagSellTrigger
+                    barSellImb += (bidVol - upperAsk)
+                    sellCounted := true
+                if not sellCounted and acrossSellTrigger
+                    barSellImb += (bidVol - askVol)
+
+            else if imbMethod == "Across (Horizontal) Primary"
+                if acrossBuyTrigger
+                    barBuyImb += (askVol - bidVol)
+                    buyCounted := true
+                if not buyCounted and diagBuyTrigger
+                    barBuyImb += (askVol - lowerBid)
+
+                if acrossSellTrigger
+                    barSellImb += (bidVol - askVol)
+                    sellCounted := true
+                if not sellCounted and diagSellTrigger
+                    barSellImb += (bidVol - upperAsk)
+
+            else if imbMethod == "Diagonal Only"
+                if diagBuyTrigger
+                    barBuyImb += (askVol - lowerBid)
+                if diagSellTrigger
+                    barSellImb += (bidVol - upperAsk)
+
+            else if imbMethod == "Across Only"
+                if acrossBuyTrigger
+                    barBuyImb += (askVol - bidVol)
+                if acrossSellTrigger
+                    barSellImb += (bidVol - askVol)
+
+// Net Imbalance for the bar
+float netImbalanceDelta = barBuyImb - barSellImb
+
+// --- Swing Logic (Fixed Lag) ---------------------------------------------
+float ph = ta.pivothigh(high, swingLen, swingLen)
+float pl = ta.pivotlow(low,  swingLen, swingLen)
+
+var float swingAccum = 0.0
+if not na(netImbalanceDelta)
+    swingAccum += netImbalanceDelta
+
+// Sum of delta that happened during the swingLen confirmation window
+float recentImbSum = math.sum(nz(netImbalanceDelta), swingLen)
+float swingSpacing = useATR ? atrMa * swingAtrMultiplier : offsetTicks * syminfo.mintick
+var label[] swingLabels = array.new<label>()
+
+if showSwing and barstate.isconfirmed
+    if not na(ph) or not na(pl)
+        float completedSwingVol = swingAccum - recentImbSum
+        float pivotPrice = not na(ph) ? ph + swingSpacing : pl - swingSpacing
+        color swingColor = completedSwingVol > 0 ? deltaPosColor : completedSwingVol < 0 ? deltaNegColor : deltaZeroColor
+        
+        array.push(swingLabels, label.new(bar_index - swingLen, pivotPrice,
+             "SI:" + fmt(completedSwingVol),
+             xloc = xloc.bar_index, yloc = yloc.price,
+             style = label.style_none, textcolor = swingColor, size = size.normal))
+        
+        // Reset and inherit the volume that happened during confirmation
+        swingAccum := recentImbSum
+
+while array.size(swingLabels) > swingsToShow
+    label.delete(array.shift(swingLabels))
+
+// --- Visual Labels (Individual Bars) -------------------------------------
+recentEnough  = bar_index >= math.max(last_bar_index - barsToShow + 1, 0)
+passZero      = showZeros ? true : netImbalanceDelta != 0
+passMin       = math.abs(nz(netImbalanceDelta)) >= minAbsImbalance
+showLabel     = barstate.isconfirmed and recentEnough and passZero and passMin and not showSwing
+
+labelSize = textSizeInput == "tiny" ? size.tiny : textSizeInput == "small" ? size.small : textSizeInput == "normal" ? size.normal : textSizeInput == "large" ? size.large : size.huge
+float spacing = useATR ? atrMa * atrMultiplier : offsetTicks * syminfo.mintick
+float lineGap = atrMa * lineGapFactor
+var label[] labels = array.new<label>()
+
+if showLabel
+    string deltaTxt = "I:" + fmt(netImbalanceDelta)
+    color  deltaColor = netImbalanceDelta > 0 ? deltaPosColor : netImbalanceDelta < 0 ? deltaNegColor : deltaZeroColor
+    float labelY = netImbalanceDelta < 0 ? high + spacing : low - spacing
+
+    if displayMode == "Delta only"
+        array.push(labels, label.new(bar_index, labelY, deltaTxt, style = label.style_none, textcolor = deltaColor, size = labelSize))
+    else
+        if netImbalanceDelta < 0
+            array.push(labels, label.new(bar_index, labelY + lineGap * 2, "B:" + fmt(barBuyImb), style = label.style_none, textcolor = deltaPosColor, size = labelSize))
+            array.push(labels, label.new(bar_index, labelY + lineGap, "S:" + fmt(barSellImb), style = label.style_none, textcolor = deltaNegColor, size = labelSize))
+            array.push(labels, label.new(bar_index, labelY, deltaTxt, style = label.style_none, textcolor = deltaColor, size = labelSize))
+        else
+            array.push(labels, label.new(bar_index, labelY + lineGap * 2, deltaTxt, style = label.style_none, textcolor = deltaColor, size = labelSize))
+            array.push(labels, label.new(bar_index, labelY + lineGap, "B:" + fmt(barBuyImb), style = label.style_none, textcolor = deltaPosColor, size = labelSize))
+            array.push(labels, label.new(bar_index, labelY, "S:" + fmt(barSellImb), style = label.style_none, textcolor = deltaNegColor, size = labelSize))
+
+while array.size(labels) > (barsToShow * (displayMode == "Delta only" ? 1 : 3) + 20)
+    label.delete(array.shift(labels))
+
+// --- In-progress Swing Label (Live updates) ------------------------------
+var label swingInProgressLabel = na
+if showSwing
+    string ipTxt = "SI~:" + fmt(swingAccum)
+    float  ipY   = swingAccum < 0 ? high + swingSpacing : low - swingSpacing
+    if na(swingInProgressLabel)
+        swingInProgressLabel := label.new(bar_index, ipY, ipTxt, style = label.style_none, textcolor = swingInProgressColor, size = labelSize)
+    else
+        label.set_x(swingInProgressLabel, bar_index)
+        label.set_y(swingInProgressLabel, ipY)
+        label.set_text(swingInProgressLabel, ipTxt)

@@ -37,6 +37,11 @@ swingAtrMultiplier   = input.float(0.1, "Swing ATR displacement multiplier", min
 footprint fp = request.footprint(ticksPerRow, valueAreaPct)
 float atrMa = ta.atr(atrLength)
 
+fmt(val) =>
+    math.abs(val) >= 1000000 ? str.tostring(val / 1000000.0, "#.0") + "M" : 
+     math.abs(val) >= 1000 ? str.tostring(val / 1000.0, "#.0") + "K" : 
+     str.tostring(val)
+
 // --- Imbalance math ------------------------------------------------------
 float barBuyImb  = na
 float barSellImb = na
@@ -125,9 +130,12 @@ float ph = ta.pivothigh(high, swingLen, swingLen)
 float pl = ta.pivotlow(low,  swingLen, swingLen)
 
 var float swingAccum = 0.0
+var int   swingNum   = 0
+var float lastBarDelta = 0.0
 
 if not na(netImbalanceDelta)
     swingAccum += netImbalanceDelta
+    lastBarDelta := netImbalanceDelta
 
 // Get the sum of the delta for the bars that occurred AFTER the actual pivot
 float recentImbSum = math.sum(nz(netImbalanceDelta), swingLen)
@@ -137,20 +145,21 @@ var label[] swingLabels = array.new<label>()
 
 if showSwing and barstate.isconfirmed
     bool isPivot = not na(ph) or not na(pl)
-    
+
     if isPivot
+        swingNum += 1
         // Remove the recent bars from the completed swing
         float completedSwingVol = swingAccum - recentImbSum
-        
+
         float pivotPrice = not na(ph) ? ph + swingSpacing : pl - swingSpacing
         color swingColor = completedSwingVol > 0 ? deltaPosColor : completedSwingVol < 0 ? deltaNegColor : deltaZeroColor
-        
+
         // Draw the historical label AT the pivot bar
         array.push(swingLabels, label.new(bar_index - swingLen, pivotPrice,
-             "SI:" + str.tostring(int(math.ceil(completedSwingVol))),
+             "SI:" + str.tostring(fmt(int(math.ceil(completedSwingVol)))),
              xloc = xloc.bar_index, yloc = yloc.price,
              style = label.style_none, textcolor = swingColor, size = size.normal))
-             
+
         // Initialize the NEW in-progress swing with the volume that happened after the pivot
         swingAccum := recentImbSum
 
@@ -171,10 +180,7 @@ labelSize =
      textSizeInput == "normal" ? size.normal :
      textSizeInput == "large"  ? size.large : size.huge
 
-fmt(val) =>
-    math.abs(val) >= 1000000 ? str.tostring(val / 1000000.0, "#.0") + "M" : 
-     math.abs(val) >= 1000 ? str.tostring(val / 1000.0, "#.0") + "K" : 
-     str.tostring(val)
+
 
 ipLabelSize = labelSize == size.tiny ? size.small : 
               labelSize == size.small ? size.normal : 
@@ -220,7 +226,7 @@ var label swingInProgressLabel = na
 
 if showSwing
     float ipDelta = swingAccum
-    string ipTxt  = "SI~:" + fmt(int(math.ceil(ipDelta)))
+    string ipTxt  = "SI~:" + str.tostring(swingNum) + "|" + fmt(int(math.ceil(lastBarDelta)))
     float  ipY    = ipDelta < 0 ? high + swingSpacing : low - swingSpacing
 
     if na(swingInProgressLabel)
