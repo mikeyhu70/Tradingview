@@ -1,0 +1,1773 @@
+//@version=6
+indicator("Mini Elliott Wave 2026-4", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ─── Inputs ───
+length         = input.int(2, "ZigZag Depth (Base)", minval=2, tooltip="Base ZigZag depth. The optimizer will test this and higher values.")
+step           = input.int(1, "Step Size", minval=1, tooltip="Increment for each iteration (e.g., step=2 tests 8, 10, 12...)")
+iterations     = input.int(5, "Iterations", minval=1, maxval=20, tooltip="Number of different depths to test (e.g., 3 iterations with base 8 and step 2 tests depths 8, 10, 12)")
+lookbackSwings = input.int(14, "Lookback Swings (around 10 is optimal)", minval=2)
+strictEW       = input.bool(true, "Strict EW Rules", tooltip="If true, forces A-B-C labeling if standard EW rules are broken.")
+showOptDebug   = input.bool(false, "Show Optimization Debug", tooltip="Shows which ZigZag depth was selected and why.")
+
+// --- Correction Mode ---
+grpCorr = "Correction Settings"
+corrMode       = input.string("Auto", "Correction Mode", options=["Conservative", "Aggressive", "Auto"], group=grpCorr, tooltip="Conservative: A starts at 38.2% retrace. Aggressive: A starts at 50% retrace. Auto: starts conservative, switches to aggressive if price breaks 38.2%. All modes cascade (break minor → major): A: 38.2%→50%→61.8%, B: 50%→61.8%→76.4%→85.4% of A, C: 61.8%→100%→123.6%→161.8% of A.")
+
+// --- Fib Settings ---
+fibsAboveIn    = input.int(3, "Fibs Above Price", minval=0, group="Fibonacci Settings")
+fibsBelowIn    = input.int(3, "Fibs Below Price", minval=0, group="Fibonacci Settings")
+useLogScale    = input.bool(true, "Use Logarithmic Fibs (Match TV Log Chart)", group="Fibonacci Settings", tooltip="Check this if your chart is in Log Scale. It recalculates targets exponentially to perfectly match TradingView's manual Fib tool.")
+fibOffsetBars  = input.int(60, "Fibonacci Label Offset (Bars)", group="Fibonacci Settings", tooltip="Shifts the dynamic Fib extension labels left or right to avoid overlapping other indicators.")
+
+// --- Confluence Targets (MAs & BBs) ---
+grpConf = "Confluence Targets (MAs & BBs)"
+colMA       = input.color(color.white, "MA Color", group=grpConf, inline="c1")
+colBB       = input.color(#FFB6C1, "BB Color", group=grpConf, inline="c1")
+confStyleIn = input.string("Dotted", "Line Style", options=["Solid", "Dotted", "Dashed"], group=grpConf)
+confLblSzIn = input.string("Small", "Label Size", options=["Tiny", "Small", "Normal"], group=grpConf, tooltip="Text size for MA and BB labels.")
+confLblSz   = confLblSzIn == "Normal" ? size.normal : confLblSzIn == "Small" ? size.small : size.tiny
+bbOffsetBars= input.int(2, "BB Label Offset (Bars)", group=grpConf, tooltip="Shifts BB labels left so they don't overlap with MA/Fib labels.")
+
+showMA5     = input.bool(true, "Show MA 1", group=grpConf, inline="m1")
+lenMA5      = input.int(5, "Length", group=grpConf, inline="m1")
+
+showMA10    = input.bool(true, "Show MA 2", group=grpConf, inline="m2")
+lenMA10     = input.int(10, "Length", group=grpConf, inline="m2")
+
+showMA20    = input.bool(true, "Show MA 3", group=grpConf, inline="m3")
+lenMA20     = input.int(20, "Length", group=grpConf, inline="m3")
+
+showMA55    = input.bool(true, "Show MA 4", group=grpConf, inline="m4")
+lenMA55     = input.int(55, "Length", group=grpConf, inline="m4")
+
+showMA200   = input.bool(true, "Show MA 5", group=grpConf, inline="m5")
+lenMA200    = input.int(200, "Length", group=grpConf, inline="m5")
+
+showWMA40   = input.bool(true, "Show Weekly MA", group=grpConf, inline="mw")
+lenWMA40    = input.int(40, "Length", group=grpConf, inline="mw")
+
+showBB      = input.bool(true, "Show Bollinger Bands", group=grpConf, inline="bb")
+lenBB       = input.int(20, "Length", group=grpConf, inline="bb")
+
+showVolMA   = input.bool(true, "Show Volume MA", group=grpConf, inline="vma")
+lenVolMA    = input.int(10, "Length", group=grpConf, inline="vma")
+colVol      = input.color(color.gray, "Color", group=grpConf, inline="vma")
+volHOffset  = input.int(2, "Vol Horizontal Offset", group=grpConf, inline="vma2")
+volVAtr     = input.float(2.0, "Vol Vertical Offset (ATR)", group=grpConf, inline="vma2", tooltip="Offset distance below the Lower Bollinger Band")
+
+// --- Display Settings ---
+showWaves      = input.bool(true, "Show Wave Labels", group="Display")
+showHist       = input.bool(false, "Show Historical Waves", group="Display")
+showProj       = input.bool(true, "Show Projections", group="Display")
+showW5Fibs     = input.bool(true, "Show Dynamic Fib Targets", group="Display")
+fibLblSzIn     = input.string("Small", "Fib Target Label Size", options=["Tiny", "Small", "Normal"], group="Display", tooltip="Text size for rolling fib target labels (W2-W5, A, B, C).")
+fibLblSz       = fibLblSzIn == "Normal" ? size.normal : fibLblSzIn == "Small" ? size.small : size.tiny
+showTable      = input.bool(false, "Show Wave Table", group="Display")
+w3ExtMult      = input.float(1.618, "Wave 3 Target Multiplier", step=0.1, group="Display", tooltip="Increase this to push the projected Wave 3 higher (e.g., 2.618). Standard EW rule is 1.618.")
+trendDir       = input.string("Auto", "Trend Direction", options=["Auto","Bullish","Bearish"], group="Display")
+
+// --- Colors & Cosmetics ---
+colorUp        = input.color(color.green, "Up Color", group="Cosmetics")
+colorDown      = input.color(color.red, "Down Color", group="Cosmetics")
+colorProj      = input.color(#2196F3, "Forecast Line Color", group="Cosmetics")
+//projStyleIn    = input.string("Dotted", "Forecast Line Style", options=["Solid", "Dotted", "Dashed"], group="Cosmetics")
+projStyleIn    = input.string("Hidden", "Forecast Line Style", options=["Hidden", "Solid", "Dotted", "Dashed"], group="Cosmetics")
+projBoxWith    = input.color(color.new(#00BCD4, 0), "Forecast Box (With Trend)", group="Cosmetics")
+projBoxCounter = input.color(color.new(#E91E63, 0), "Forecast Box (Counter Trend)", group="Cosmetics")
+projBoxSzIn    = input.string("Small", "Forecast Box Size", options=["Tiny", "Small", "Normal", "Large"], group="Cosmetics")
+projBoxTransp  = input.int(50, "Forecast Box Transparency", minval=0, maxval=100, group="Cosmetics", tooltip="0 = solid, 100 = fully transparent")
+projOffsetBars = input.int(30, "Forecast Horizontal Offset (Bars)", group="Cosmetics", tooltip="Shifts the projected target boxes left or right to avoid overlapping other indicators.")
+
+// --- ATR Label Displacement ---
+atrLen         = input.int(14, "ATR Length for Labels", group="Cosmetics")
+atrMult        = input.float(1.5, "Confirmed Label Displacement (ATR)", step=0.1, group="Cosmetics", tooltip="Standard gap between confirmed labels and the candle wick.")
+ongoingCol     = input.color(color.yellow, "Ongoing Wave Color", group="Cosmetics", tooltip="Distinct color for the current, unconfirmed wave.")
+ongoingMult    = input.float(1.5, "Ongoing Label Displacement (ATR)", step=0.1, group="Cosmetics", tooltip="Separate gap for ONLY the active/ongoing wave to make it stand out.")
+
+showWMA     = input.bool(false, "Show Background WMAs")
+wmaColor50  = input.color(#FF9800, "50 WMA Color")
+wmaColor200 = input.color(#E91E63, "200 WMA Color")
+tableSizeIn = input.string("Small", "Table Text Size", options=["Tiny", "Small", "Normal"])
+tblSz       = tableSizeIn == "Normal" ? size.normal : tableSizeIn == "Small" ? size.small : size.tiny
+tblSzSm     = tableSizeIn == "Normal" ? size.small : tableSizeIn == "Small" ? size.tiny : size.tiny
+
+// ─── GLOBAL CALCULATIONS ───
+float atrVal = ta.atr(atrLen)
+float displ  = nz(atrVal) * atrMult
+float ongoingDispl = nz(atrVal) * ongoingMult
+
+// ─── DAILY MAs via request.security ───
+float ma5   = request.security(syminfo.tickerid, "D", ta.sma(close, lenMA5))
+float ma10  = request.security(syminfo.tickerid, "D", ta.sma(close, lenMA10))
+float ma20  = request.security(syminfo.tickerid, "D", ta.sma(close, lenMA20))
+float ma55  = request.security(syminfo.tickerid, "D", ta.sma(close, lenMA55))
+float ma200 = request.security(syminfo.tickerid, "D", ta.sma(close, lenMA200))
+// ─── WEEKLY MA via request.security ───
+float wma40 = request.security(syminfo.tickerid, "W", ta.sma(close, lenWMA40))
+
+[bbMid, bbUp, bbLow] = request.security(syminfo.tickerid, "D", ta.bb(close, lenBB, 2.0))
+float volMA = request.security(syminfo.tickerid, "D", ta.sma(volume, lenVolMA))
+
+activeConfStyle = confStyleIn == "Solid" ? line.style_solid : confStyleIn == "Dashed" ? line.style_dashed : line.style_dotted
+
+// ─── Global Label Initializations ───
+var label lbl_origin = label.new(na, na, "", size=size.small, textcolor=color.white)
+var label lbl_w1 = label.new(na, na, "", size=size.small, textcolor=color.white)
+var label lbl_w2 = label.new(na, na, "", size=size.small, textcolor=color.white)
+var label lbl_w3 = label.new(na, na, "", size=size.small, textcolor=color.white)
+var label lbl_w4 = label.new(na, na, "", size=size.small, textcolor=color.white)
+var label lbl_w5 = label.new(na, na, "", size=size.small, textcolor=color.white)
+var label lbl_debug = label.new(na, na, "", size=size.small, textcolor=color.white)
+
+var line[]  _dl   = array.new<line>()
+var label[] _dlab = array.new<label>()
+
+var float[] fut_p = array.new_float()
+var string[] fut_l = array.new_string()
+var int[]   fut_t = array.new_int()     // bar position of each wave box
+bool hideProjLines = projStyleIn == "Hidden"
+
+
+// ─── UNIVERSAL LOG/LIN PROJECTION ENGINE ───
+calcProj(baseP, refA, refB, mult, dir, isLog) =>
+    float safeBase = math.max(baseP, 1e-10)
+    float safeA = math.max(refA, 1e-10)
+    float safeB = math.max(refB, 1e-10)
+    if isLog
+        math.exp(math.log(safeBase) + dir * (math.abs(math.log(safeA) - math.log(safeB)) * mult))
+    else
+        baseP + dir * (math.abs(refA - refB) * mult)
+
+// ─── Nearest-target cascade helpers ───
+// Select level among up to 4 candidates: pick nearest that price hasn't broken, cascade if broken
+// dir0 > 0 (bull): price breaks UP → close > level triggers next
+// dir0 < 0 (bear): price breaks DOWN → close < level triggers next
+selectNearest4(float a, float b, float c, float d, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+        if cl > c
+            sel := d
+    else
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+        if cl < c
+            sel := d
+    sel
+
+// Same but for counter-trend (retrace): bull retraces DOWN, bear retraces UP
+selectNearestRetrace4(float a, float b, float c, float d, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+        if cl < c
+            sel := d
+    else
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+        if cl > c
+            sel := d
+    sel
+
+selectNearest3(float a, float b, float c, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+    else
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+    sel
+
+selectNearestRetrace3(float a, float b, float c, float cl, float dir0) =>
+    float sel = a
+    if dir0 > 0
+        if cl < a
+            sel := b
+        if cl < b
+            sel := c
+    else
+        if cl > a
+            sel := b
+        if cl > b
+            sel := c
+    sel
+
+// ─── Drawing Functions ───
+drawProjectionLines(startP, startT, lineCol, style, currentPrice, colWith, colCounter, boxSz, macroIsBull, hOffset, line[] dl, label[] dlab) =>
+    simP = startP
+    simT = startT
+    barSp = hOffset
+    bool isFirstForwardLine = true
+    array.clear(fut_t)
+
+    if array.size(fut_p) > 0
+        for i = 0 to array.size(fut_p) - 1
+            tp = array.get(fut_p, i)
+            lb = array.get(fut_l, i)
+            nt = simT + barSp
+            array.push(fut_t, nt)
+
+            bool isUpMove = tp > simP
+            bool isWithTrend = (macroIsBull and isUpMove) or (not macroIsBull and not isUpMove)
+            color activeBoxCol = isWithTrend ? colWith : colCounter
+
+            string finalLb = lb
+            if lb != ""
+                float pctChg = currentPrice != 0 ? ((tp - currentPrice) / currentPrice) * 100.0 : 0.0
+                string pctStr = (pctChg >= 0 ? "+" : "") + str.tostring(math.round(pctChg * 10) / 10, "#.#") + "%"
+                finalLb := lb + " (" + pctStr + ")"
+
+            if isFirstForwardLine
+                if not hideProjLines
+                    array.push(dl, line.new(startT, startP, nt, tp, color=lineCol, style=style, width=2))
+                if lb != ""
+                    array.push(dlab, label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz))
+                isFirstForwardLine := false
+            else
+                if not hideProjLines
+                    array.push(dl, line.new(simT, simP, nt, tp, color=lineCol, style=style, width=2))
+                if lb != ""
+                    array.push(dlab, label.new(nt, tp, finalLb, color=color.new(activeBoxCol, projBoxTransp), style=label.style_label_left, textcolor=color.white, size=boxSz))
+            simP := tp
+            simT := nt
+
+drawConfluenceLine(isOn, val, startT, endT, txt, col, lStyle, line[] dl, label[] dlab) =>
+    if isOn and not na(val)
+        array.push(dl, line.new(startT, val, endT, val, color=color.new(col, 20), style=lStyle, width=1))
+        array.push(dlab, label.new(endT, val, txt + " (" + str.tostring(val, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_left, textcolor=col, size=confLblSz))
+
+wma50  = ta.wma(close, 50)
+wma200 = ta.wma(close, 200)
+plot(showWMA ? wma50  : na, "50 WMA",  color=wmaColor50,  linewidth=2)
+plot(showWMA ? wma200 : na, "200 WMA", color=wmaColor200, linewidth=2)
+
+// ─── Multi-Depth State via UDT ───
+type DepthState
+    array<float> px
+    array<int> pt
+    float lastPP
+    int lastPB
+    int lastDir
+
+var array<DepthState> states = array.new<DepthState>()
+if barstate.isfirst
+    for i = 0 to 19
+        array.push(states, DepthState.new(array.new_float(), array.new_int(), na, na, 0))
+
+// ─── Helper Functions ───
+find_extremum(float[] px_arr, int start_idx, int end_idx, bool seek_max) =>
+    float best_v = array.get(px_arr, start_idx)
+    int best_i = start_idx
+    if end_idx >= start_idx
+        for i = start_idx to end_idx
+            float v = array.get(px_arr, i)
+            if seek_max
+                if v > best_v
+                    best_v := v
+                    best_i := i
+            else
+                if v < best_v
+                    best_v := v
+                    best_i := i
+    best_i
+
+// Parity-aware: only considers indices where (i - origin) % 2 == parity
+find_extremum_swing(float[] px_arr, int start_idx, int end_idx, bool seek_max, int origin_idx, int parity) =>
+    float best_v = na
+    int best_i = start_idx
+    if end_idx >= start_idx
+        for i = start_idx to end_idx
+            if (i - origin_idx) % 2 == parity
+                float v = array.get(px_arr, i)
+                if na(best_v)
+                    best_v := v
+                    best_i := i
+                else if seek_max and v > best_v
+                    best_v := v
+                    best_i := i
+                else if not seek_max and v < best_v
+                    best_v := v
+                    best_i := i
+    best_i
+
+findStructuralWaves(isBull, px_arr, lookback) =>
+    sz = array.size(px_arr)
+    recentStart = math.max(0, sz - lookback) 
+    int oIdx = find_extremum(px_arr, recentStart, sz - 1, not isBull) 
+    int gExtI = find_extremum(px_arr, oIdx, sz - 1, isBull) 
+    
+    int w1I = oIdx, int w2I = oIdx, int w3I = oIdx, int w4I = oIdx, int w5I = oIdx
+    int dist = gExtI - oIdx
+    
+    if dist < 3
+        w1I := gExtI
+        w2I := math.min(w1I + 1, sz - 1)
+        w3I := math.min(w2I + 1, sz - 1)
+        w4I := math.min(w3I + 1, sz - 1)
+        w5I := math.min(w4I + 1, sz - 1)
+    else if dist < 5
+        w3I := gExtI
+        w1I := find_extremum_swing(px_arr, oIdx + 1, w3I - 1, isBull, oIdx, 1)
+        w2I := find_extremum_swing(px_arr, w1I + 1, w3I - 1, not isBull, oIdx, 0)
+        w4I := math.min(w3I + 1, sz - 1)
+        w5I := math.min(w4I + 1, sz - 1)
+    else
+        w5I := gExtI
+        
+        float bestScore = -1.0
+        int bW1 = oIdx + 1, int bW2 = oIdx + 2, int bW3 = oIdx + 3, int bW4 = oIdx + 4
+        
+        float p0 = array.get(px_arr, oIdx)
+        float p5 = array.get(px_arr, w5I)
+        
+        int loopCap = math.min(w5I, oIdx + 35)
+        for i = oIdx + 1 to math.min(w5I - 4, loopCap)
+            for j = i + 1 to math.min(w5I - 3, loopCap + 1)
+                for k = j + 1 to math.min(w5I - 2, loopCap + 2)
+                    for m = k + 1 to math.min(w5I - 1, loopCap + 3)
+                        float p1 = array.get(px_arr, i)
+                        float p2 = array.get(px_arr, j)
+                        float p3 = array.get(px_arr, k)
+                        float p4 = array.get(px_arr, m)
+                        
+                        bool isValid = true
+
+                        // ── Enforce swing type: zigzag alternates H-L-H-L ──
+                        // W1,W3 must be opposite type from origin (odd offset)
+                        // W2,W4 must be same type as origin (even offset)
+                        if (i - oIdx) % 2 != 1
+                            isValid := false
+                        if (j - oIdx) % 2 != 0
+                            isValid := false
+                        if (k - oIdx) % 2 != 1
+                            isValid := false
+                        if (m - oIdx) % 2 != 0
+                            isValid := false
+
+                        if isValid and isBull
+                            if p2 <= p0 or p3 <= p1 or p5 <= p3 or p4 <= p1
+                                isValid := false
+                        if isValid and not isBull
+                            if p2 >= p0 or p3 >= p1 or p5 >= p3 or p4 >= p1
+                                isValid := false
+                                
+                        if isValid
+                            float len1 = math.abs(p1 - p0)
+                            float len3 = math.abs(p3 - p2)
+                            float len5 = math.abs(p5 - p4)
+                            
+                            if len3 < len1 and len3 < len5
+                                isValid := false
+                                
+                            if isValid
+                                float score = len3
+                                if score > bestScore
+                                    bestScore := score
+                                    bW1 := i
+                                    bW2 := j
+                                    bW3 := k
+                                    bW4 := m
+        
+        if bestScore > -1.0
+            w1I := bW1
+            w2I := bW2
+            w3I := bW3
+            w4I := bW4
+        else
+            int limit1 = oIdx + math.max(1, math.round(dist * 0.33))
+            int limit2 = oIdx + math.max(2, math.round(dist * 0.66))
+            
+            w1I := find_extremum_swing(px_arr, oIdx + 1, limit1, isBull, oIdx, 1)
+            w3I := find_extremum_swing(px_arr, math.max(w1I + 2, limit1 + 1), math.min(limit2, w5I - 2), isBull, oIdx, 1)
+            w2I := find_extremum_swing(px_arr, w1I + 1, w3I - 1, not isBull, oIdx, 0)
+            w4I := find_extremum_swing(px_arr, w3I + 1, w5I - 1, not isBull, oIdx, 0)
+        
+    [oIdx, w1I, w2I, w3I, w4I, w5I]
+
+// ─── EW SCORING FUNCTION ───
+scoreEWStructure(px_arr, pt_arr, sOrigin, sW1, sW2, sW3, sW4, sW5, isBull) =>
+    float score = 0.0
+    int sz = array.size(px_arr)
+    
+    if sz < 5 or sW5 >= sz or sOrigin < 0
+        score := -1000.0
+    else
+        float p0 = array.get(px_arr, sOrigin)
+        float p1 = sW1 > sOrigin and sW1 < sz ? array.get(px_arr, sW1) : p0
+        float p2 = sW2 > sW1 and sW2 < sz ? array.get(px_arr, sW2) : p0
+        float p3 = sW3 > sW2 and sW3 < sz ? array.get(px_arr, sW3) : p0
+        float p4 = sW4 > sW3 and sW4 < sz ? array.get(px_arr, sW4) : p0
+        float p5 = sW5 > sW4 and sW5 < sz ? array.get(px_arr, sW5) : p0
+        
+        float len1 = math.abs(p1 - p0)
+        float len2 = math.abs(p2 - p1)
+        float len3 = math.abs(p3 - p2)
+        float len4 = math.abs(p4 - p3)
+        float len5 = math.abs(p5 - p4)
+        
+        bool rule1 = true
+        if isBull
+            rule1 := p2 > p0
+        else
+            rule1 := p2 < p0
+        if rule1
+            score += 100.0
+        else
+            score -= 200.0
+        
+        bool rule2 = not (len3 < len1 and len3 < len5)
+        if rule2
+            score += 100.0
+        else
+            score -= 200.0
+        
+        bool rule3 = true
+        if isBull
+            rule3 := p4 > p1
+        else
+            rule3 := p4 < p1
+        if rule3
+            score += 100.0
+        else
+            score -= 200.0
+        
+        float w2Ret = len1 > 0 ? len2 / len1 : 0.0
+        float w2Score = 0.0
+        if w2Ret >= 0.382 and w2Ret <= 0.786
+            w2Score := 50.0 - math.abs(w2Ret - 0.618) * 100.0
+        else if w2Ret > 0.786 and w2Ret < 1.0
+            w2Score := 10.0
+        else
+            w2Score := -20.0
+        score += w2Score
+        
+        float w3Ext = len1 > 0 ? len3 / len1 : 0.0
+        float w3Score = 0.0
+        if w3Ext >= 1.618 and w3Ext <= 2.0
+            w3Score := 80.0
+        else if w3Ext >= 2.0 and w3Ext <= 2.618
+            w3Score := 70.0
+        else if w3Ext >= 2.618 and w3Ext <= 3.618
+            w3Score := 60.0
+        else if w3Ext >= 1.0 and w3Ext < 1.618
+            w3Score := 30.0
+        else if w3Ext > 3.618
+            w3Score := 40.0
+        else
+            w3Score := -30.0
+        score += w3Score
+        
+        float w4Ret = len3 > 0 ? len4 / len3 : 0.0
+        float w4Score = 0.0
+        if w4Ret >= 0.236 and w4Ret <= 0.5
+            w4Score := 50.0 - math.abs(w4Ret - 0.382) * 80.0
+        else if w4Ret > 0.5 and w4Ret <= 0.618
+            w4Score := 20.0
+        else if w4Ret > 0.618
+            w4Score := -20.0
+        else
+            w4Score := 10.0
+        score += w4Score
+        
+        float w5Ratio = len1 > 0 ? len5 / len1 : 0.0
+        float w5Score = 0.0
+        if w5Ratio >= 0.618 and w5Ratio <= 1.0
+            w5Score := 40.0
+        else if w5Ratio > 1.0 and w5Ratio <= 1.618
+            w5Score := 50.0
+        else if w5Ratio > 1.618 and w5Ratio <= 2.618
+            w5Score := 30.0
+        else if w5Ratio < 0.618 and w5Ratio > 0.382
+            w5Score := 20.0
+        else
+            w5Score := -10.0
+        score += w5Score
+        
+        bool alternation = (w2Ret > 0.5 and w4Ret < 0.382) or (w2Ret < 0.5 and w4Ret > 0.382)
+        if alternation
+            score += 30.0
+        
+        if len3 > len1 and len3 > len5
+            score += 40.0
+        
+        int swingCount = 0
+        if sW1 > sOrigin
+            swingCount += 1
+        if sW2 > sW1
+            swingCount += 1
+        if sW3 > sW2
+            swingCount += 1
+        if sW4 > sW3
+            swingCount += 1
+        if sW5 > sW4
+            swingCount += 1
+        score += swingCount * 10.0
+        
+    score
+
+// ─── Pivot Detection for Multiple Depths ───
+for d = 0 to iterations - 1
+    int depthVal = length + step * d
+    DepthState st = array.get(states, d)
+    float ph = ta.pivothigh(high, depthVal, depthVal)
+    float pl = ta.pivotlow(low, depthVal, depthVal)
+
+    if not na(ph)
+        if st.lastDir != 1
+            if not na(st.lastPP)
+                if showHist and d == 0
+                    line.new(st.lastPB, st.lastPP, bar_index[depthVal], ph, color=colorUp, width=1)
+            st.lastPP := ph, st.lastPB := bar_index[depthVal], st.lastDir := 1
+            array.push(st.px, ph), array.push(st.pt, bar_index[depthVal])
+        else
+            if ph >= st.lastPP
+                st.lastPP := ph, st.lastPB := bar_index[depthVal]
+                if array.size(st.px) > 0
+                    array.set(st.px, array.size(st.px) - 1, ph), array.set(st.pt, array.size(st.pt) - 1, bar_index[depthVal])
+
+    if not na(pl)
+        if st.lastDir != -1
+            if not na(st.lastPP)
+                if showHist and d == 0
+                    line.new(st.lastPB, st.lastPP, bar_index[depthVal], pl, color=colorDown, width=1)
+            st.lastPP := pl, st.lastPB := bar_index[depthVal], st.lastDir := -1
+            array.push(st.px, pl), array.push(st.pt, bar_index[depthVal])
+        else
+            if pl <= st.lastPP
+                st.lastPP := pl, st.lastPB := bar_index[depthVal]
+                if array.size(st.px) > 0
+                    array.set(st.px, array.size(st.px) - 1, pl), array.set(st.pt, array.size(st.pt) - 1, bar_index[depthVal])
+
+// ─── Main Execution ───
+if barstate.islast
+    // Delete all dynamic drawings from the previous tick before redrawing
+    for _l in _dl
+        line.delete(_l)
+    array.clear(_dl)
+    for _lb in _dlab
+        label.delete(_lb)
+    array.clear(_dlab)
+
+    isBull = true
+    if trendDir == "Bearish"
+        isBull := false
+    else if trendDir == "Auto"
+        float[] px0 = array.get(states, 0).px
+        if array.size(px0) > 1
+            isBull := array.get(px0, array.size(px0) - 1) > array.get(px0, math.max(0, array.size(px0) - lookbackSwings))
+
+    float bestScore = -99999.0
+    int bestDepth = length
+    int bestIdx = 1
+    
+    var float[] best_px = array.new_float()
+    var int[]   best_pt = array.new_int()
+    var int best_lastDir = 0
+    
+    int best_sOrigin = 0
+    int best_sW1 = 0
+    int best_sW2 = 0
+    int best_sW3 = 0
+    int best_sW4 = 0
+    int best_sW5 = 0
+    
+    for d = 0 to iterations - 1
+        DepthState st = array.get(states, d)
+        int depthVal = length + step * d
+        
+        if array.size(st.px) >= 5
+            float[] local_pxN = array.copy(st.px)
+            int[] local_ptN = array.copy(st.pt)
+            
+            if array.size(local_pxN) > 0
+                last_p = array.get(local_pxN, array.size(local_pxN) - 1)
+                if isBull
+                    if st.lastDir == -1 and high > last_p
+                        array.push(local_pxN, high), array.push(local_ptN, bar_index)
+                    else if st.lastDir == 1 and high > last_p
+                        array.set(local_pxN, array.size(local_pxN) - 1, high), array.set(local_ptN, array.size(local_ptN) - 1, bar_index)
+                    else if st.lastDir == 1 and low < last_p
+                        array.push(local_pxN, low), array.push(local_ptN, bar_index)
+                else
+                    if st.lastDir == 1 and low < last_p
+                        array.push(local_pxN, low), array.push(local_ptN, bar_index)
+                    else if st.lastDir == -1 and low < last_p
+                        array.set(local_pxN, array.size(local_pxN) - 1, low), array.set(local_ptN, array.size(local_ptN) - 1, bar_index)
+                    else if st.lastDir == -1 and high > last_p
+                        array.push(local_pxN, high), array.push(local_ptN, bar_index)
+            
+            [oN, w1N, w2N, w3N, w4N, w5N] = findStructuralWaves(isBull, local_pxN, lookbackSwings)
+            float scoreN = scoreEWStructure(local_pxN, local_ptN, oN, w1N, w2N, w3N, w4N, w5N, isBull)
+            
+            if scoreN > bestScore
+                bestScore := scoreN
+                bestDepth := depthVal
+                bestIdx := d + 1
+                array.clear(best_px)
+                array.clear(best_pt)
+                for i = 0 to array.size(local_pxN) - 1
+                    array.push(best_px, array.get(local_pxN, i))
+                    array.push(best_pt, array.get(local_ptN, i))
+                best_lastDir := st.lastDir
+                best_sOrigin := oN
+                best_sW1 := w1N
+                best_sW2 := w2N
+                best_sW3 := w3N
+                best_sW4 := w4N
+                best_sW5 := w5N
+
+    float[] local_px = best_px
+    int[]   local_pt = best_pt
+    int sOrigin = best_sOrigin
+    int sW1 = best_sW1
+    int sW2 = best_sW2
+    int sW3 = best_sW3
+    int sW4 = best_sW4
+    int sW5 = best_sW5
+    
+    sz = array.size(local_px)
+
+    bool isValidMotive = true
+    if strictEW and sW4 > sW3 and sW1 > sOrigin and sz > sW5
+        float p0 = array.get(local_px, sOrigin)
+        float p1 = array.get(local_px, sW1)
+        float p2 = array.get(local_px, sW2)
+        float p3 = array.get(local_px, sW3)
+        float p4 = array.get(local_px, sW4)
+        float p5 = (sW5 > sW4 and sW5 < sz) ? array.get(local_px, sW5) : na
+        
+        if isBull and p2 <= p0
+            isValidMotive := false
+        if not isBull and p2 >= p0
+            isValidMotive := false
+            
+        if isBull and p4 <= p1
+            isValidMotive := false
+        if not isBull and p4 >= p1
+            isValidMotive := false
+            
+        float len1 = math.abs(p1 - p0)
+        float len3 = math.abs(p3 - p2)
+        float len5 = not na(p5) ? math.abs(p5 - p4) : 0.0
+        if len3 < len1 and (not na(p5) and len3 < len5)
+            isValidMotive := false
+
+    int curMot = 0
+    if isValidMotive
+        if sW1 > sOrigin
+            curMot := 1
+        if sW2 > sW1
+            curMot := 2
+        if sW3 > sW2
+            curMot := 3
+        if sW4 > sW3
+            curMot := 4
+        if sW5 > sW4
+            curMot := 5
+            
+    int curABC = 0
+    if not isValidMotive
+        if sW3 > sOrigin
+            curABC := 1
+        if sW4 > sW3
+            curABC := 2
+        if sW5 > sW4
+            curABC := 3
+
+    if showOptDebug
+        string debugTxt = "Optimal Depth: " + str.tostring(bestDepth) + "\nScore: " + str.tostring(bestScore, "#.#") + "\nIterations: " + str.tostring(iterations) + "\nTrend: " + (isBull ? "Bullish" : "Bearish") + "\nCorr Mode: " + corrMode
+        label.set_xy(lbl_debug, bar_index + 5, high * 1.02)
+        label.set_text(lbl_debug, debugTxt)
+        label.set_color(lbl_debug, color.new(#2196F3, 20))
+        label.set_style(lbl_debug, label.style_label_left)
+        label.set_textcolor(lbl_debug, color.white)
+    else
+        label.set_text(lbl_debug, "")
+
+    if showWaves and sz > sOrigin
+        float p0 = array.get(local_px, sOrigin)
+        float p1_check = sW1 > sOrigin and sW1 < sz ? array.get(local_px, sW1) : (sW3 > sOrigin and sW3 < sz ? array.get(local_px, sW3) : close)
+        bool oIsV = p1_check > p0
+        
+        label.set_xy(lbl_origin, array.get(local_pt, sOrigin), oIsV ? p0 - displ : p0 + displ)
+        label.set_text(lbl_origin, "(0)"), label.set_color(lbl_origin, color.new(color.gray, 60)), label.set_style(lbl_origin, oIsV ? label.style_label_up : label.style_label_down)
+        
+        if isValidMotive
+            if sW1 > sOrigin and sW1 < sz
+                float y1 = array.get(local_px, sW1)
+                bool isV = y1 < p0
+                bool isC = (curMot == 1)
+                label.set_xy(lbl_w1, array.get(local_pt, sW1), isV ? y1 - (isC ? ongoingDispl : displ) : y1 + (isC ? ongoingDispl : displ)), label.set_text(lbl_w1, "(1)"), label.set_color(lbl_w1, color.new(isC ? ongoingCol : (isBull ? color.blue : color.orange), 0)), label.set_style(lbl_w1, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w1, "")
+            if sW2 > sW1 and sW2 < sz
+                float y2 = array.get(local_px, sW2)
+                float py = array.get(local_px, sW1)
+                bool isV = y2 < py
+                bool isC = (curMot == 2)
+                label.set_xy(lbl_w2, array.get(local_pt, sW2), isV ? y2 - (isC ? ongoingDispl : displ) : y2 + (isC ? ongoingDispl : displ)), label.set_text(lbl_w2, "(2)"), label.set_color(lbl_w2, color.new(isC ? ongoingCol : (isBull ? color.orange : color.blue), 0)), label.set_style(lbl_w2, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w2, "")
+            if sW3 > sW2 and sW3 < sz
+                float y3 = array.get(local_px, sW3)
+                float py = array.get(local_px, sW2)
+                bool isV = y3 < py
+                bool isC = (curMot == 3)
+                label.set_xy(lbl_w3, array.get(local_pt, sW3), isV ? y3 - (isC ? ongoingDispl : displ) : y3 + (isC ? ongoingDispl : displ)), label.set_text(lbl_w3, "(3)"), label.set_color(lbl_w3, color.new(isC ? ongoingCol : (isBull ? color.blue : color.orange), 0)), label.set_style(lbl_w3, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w3, "")
+            if sW4 > sW3 and sW4 < sz
+                float y4 = array.get(local_px, sW4)
+                float py = array.get(local_px, sW3)
+                bool isV = y4 < py
+                bool isC = (curMot == 4)
+                label.set_xy(lbl_w4, array.get(local_pt, sW4), isV ? y4 - (isC ? ongoingDispl : displ) : y4 + (isC ? ongoingDispl : displ)), label.set_text(lbl_w4, "(4)"), label.set_color(lbl_w4, color.new(isC ? ongoingCol : (isBull ? color.orange : color.blue), 0)), label.set_style(lbl_w4, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w4, "")
+            if sW5 > sW4 and sW5 < sz
+                float y5 = array.get(local_px, sW5)
+                float py = array.get(local_px, sW4)
+                bool isV = y5 < py
+                bool isC = (curMot == 5)
+                label.set_xy(lbl_w5, array.get(local_pt, sW5), isV ? y5 - (isC ? ongoingDispl : displ) : y5 + (isC ? ongoingDispl : displ)), label.set_text(lbl_w5, "(5) / X / A"), label.set_color(lbl_w5, color.new(isC ? ongoingCol : (isBull ? color.blue : color.orange), 0)), label.set_style(lbl_w5, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w5, "")
+        else
+            if sW3 > sOrigin and sW3 < sz
+                float ya = array.get(local_px, sW3)
+                bool isV = ya < p0
+                bool isC = (curABC == 1)
+                label.set_xy(lbl_w1, array.get(local_pt, sW3), isV ? ya - (isC ? ongoingDispl : displ) : ya + (isC ? ongoingDispl : displ)), label.set_text(lbl_w1, "A"), label.set_color(lbl_w1, color.new(isC ? ongoingCol : (isBull ? color.blue : color.orange), 0)), label.set_style(lbl_w1, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w1, "")
+            if sW4 > sW3 and sW4 < sz
+                float yb = array.get(local_px, sW4)
+                float py = array.get(local_px, sW3)
+                bool isV = yb < py
+                bool isC = (curABC == 2)
+                label.set_xy(lbl_w2, array.get(local_pt, sW4), isV ? yb - (isC ? ongoingDispl : displ) : yb + (isC ? ongoingDispl : displ)), label.set_text(lbl_w2, "B"), label.set_color(lbl_w2, color.new(isC ? ongoingCol : (isBull ? color.orange : color.blue), 0)), label.set_style(lbl_w2, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w2, "")
+            if sW5 > sW4 and sW5 < sz
+                float yc = array.get(local_px, sW5)
+                float py = array.get(local_px, sW4)
+                bool isV = yc < py
+                bool isC = (curABC == 3)
+                label.set_xy(lbl_w3, array.get(local_pt, sW5), isV ? yc - (isC ? ongoingDispl : displ) : yc + (isC ? ongoingDispl : displ)), label.set_text(lbl_w3, "C"), label.set_color(lbl_w3, color.new(isC ? ongoingCol : (isBull ? color.blue : color.orange), 0)), label.set_style(lbl_w3, isV ? label.style_label_up : label.style_label_down)
+            else
+                label.set_text(lbl_w3, "")
+                
+            label.set_text(lbl_w4, "")
+            label.set_text(lbl_w5, "")
+
+    float fibPoint1 = na 
+    float fibPoint2 = na 
+    float fibPoint3 = na 
+    bool  isDown    = false
+
+    if showProj and sz >= 3
+        array.clear(fut_p)
+        array.clear(fut_l)
+
+        float originP = array.get(local_px, sOrigin)
+        float dir0 = isBull ? 1.0 : -1.0
+
+        // Projection start — set by each branch, used by rolling fibs + drawProjectionLines
+        float projStartP = close
+        int   projStartT = bar_index
+
+        bool w1Done = isValidMotive and sW1 > sOrigin and sW1 < sz
+        bool w2Done = isValidMotive and sW2 > sW1 and sW2 < sz
+        bool w3Done = isValidMotive and sW3 > sW2 and sW3 < sz
+        bool w4Done = isValidMotive and sW4 > sW3 and sW4 < sz
+        bool w5Done = isValidMotive and sW5 > sW4 and sW5 < sz
+        
+        bool aDone = not isValidMotive and sW3 > sOrigin and sW3 < sz
+        bool bDone = not isValidMotive and sW4 > sW3 and sW4 < sz
+        bool cDone = not isValidMotive and sW5 > sW4 and sW5 < sz
+
+        if isValidMotive
+            float p1 = w1Done ? array.get(local_px, sW1) : calcProj(originP, originP * 1.05, originP, 1.0, dir0, useLogScale)
+
+            // W2: retrace of W1 — 38.2%, 50%, 61.8% (GP), 78.6%, 88.6% (deep)
+            float p2 = originP
+            if w2Done
+                p2 := array.get(local_px, sW2)
+            else if w1Done
+                float t2_a = calcProj(p1, p1, originP, 0.382, -dir0, useLogScale)
+                float t2_b = calcProj(p1, p1, originP, 0.500, -dir0, useLogScale)
+                float t2_c = calcProj(p1, p1, originP, 0.618, -dir0, useLogScale)
+                float t2_d = calcProj(p1, p1, originP, 0.786, -dir0, useLogScale)
+                float t2_e = calcProj(p1, p1, originP, 0.886, -dir0, useLogScale)
+                p2 := t2_a
+                if dir0 > 0
+                    if close < t2_a
+                        p2 := t2_b
+                    if close < t2_b
+                        p2 := t2_c
+                    if close < t2_c
+                        p2 := t2_d
+                    if close < t2_d
+                        p2 := t2_e
+                else
+                    if close > t2_a
+                        p2 := t2_b
+                    if close > t2_b
+                        p2 := t2_c
+                    if close > t2_c
+                        p2 := t2_d
+                    if close > t2_d
+                        p2 := t2_e
+
+            // W3: first target above close from full W3 fib set (matches displayed *)
+            float p3 = originP
+            if w3Done
+                p3 := array.get(local_px, sW3)
+            else if w2Done or w1Done
+                float[] w3mults = array.from(1.0, w3ExtMult, 2.0, 2.618, 3.0, 3.618, 4.0, 4.236, 4.618)
+                p3 := calcProj(p2, p1, originP, 4.618, dir0, useLogScale)  // default to highest
+                for i = 0 to array.size(w3mults) - 1
+                    float tgt = calcProj(p2, p1, originP, array.get(w3mults, i), dir0, useLogScale)
+                    if dir0 > 0
+                        if tgt > close
+                            p3 := tgt
+                            break
+                    else
+                        if tgt < close
+                            p3 := tgt
+                            break
+
+            // W4 base: use p3 (the W3 level marked with *) as W4 retrace base
+            float w4Base = p3
+            float p4 = originP
+            if w4Done
+                p4 := array.get(local_px, sW4)
+            else if w3Done or w2Done or w1Done
+                w4Base := p3
+                // W4 retrace from W3 (*) back toward W2
+                float t4_a = calcProj(w4Base, w4Base, p2, 0.236, -dir0, useLogScale)
+                float t4_b = calcProj(w4Base, w4Base, p2, 0.382, -dir0, useLogScale)
+                float t4_c = calcProj(w4Base, w4Base, p2, 0.500, -dir0, useLogScale)
+                float t4_d = calcProj(w4Base, w4Base, p2, 0.618, -dir0, useLogScale)
+                p4 := selectNearestRetrace4(t4_a, t4_b, t4_c, t4_d, close, dir0)
+
+            // W5: extension from nearest W4 target
+            // Targets: 61.8% W1, W5=W1 (primary), 61.8% W1-3, 161.8% W3, 161.8% W1-3
+            float p5 = originP
+            if w5Done
+                p5 := array.get(local_px, sW5)
+            else if w4Done or w3Done or w2Done or w1Done
+                // Select nearest W4 retrace target as W5 base
+                float w4t_a = calcProj(w4Base, w4Base, p2, 0.236, -dir0, useLogScale)
+                float w4t_b = calcProj(w4Base, w4Base, p2, 0.382, -dir0, useLogScale)
+                float w4t_c = calcProj(w4Base, w4Base, p2, 0.500, -dir0, useLogScale)
+                float w4t_d = calcProj(w4Base, w4Base, p2, 0.618, -dir0, useLogScale)
+                float w5Base = selectNearestRetrace4(w4t_a, w4t_b, w4t_c, w4t_d, close, dir0)
+                if w4Done
+                    w5Base := dir0 > 0 ? math.min(w5Base, p4) : math.max(w5Base, p4)
+                // W5 targets from selected W4 base — cascade through standard EW levels
+                float t5_a = calcProj(w5Base, p1, originP, 0.618, dir0, useLogScale)  // 61.8% W1
+                float t5_b = calcProj(w5Base, p1, originP, 1.0, dir0, useLogScale)    // 100% W1 (W5=W1)
+                float t5_c = calcProj(w5Base, p3, originP, 0.618, dir0, useLogScale)  // 61.8% W1-3
+                float t5_d = calcProj(w5Base, p3, p2, 1.618, dir0, useLogScale)       // 161.8% W3
+                p5 := selectNearest4(t5_a, t5_b, t5_c, t5_d, close, dir0)
+
+            // ── W3 fib targets: extension targets from W2 using W1 as reference ──
+            // Only show when W3 is the current or next wave (hide once W4+ confirmed)
+            float p3Orig = p3
+            float p3Star = p3
+            if w2Done and not w4Done and showW5Fibs
+                float[] w3AllP = array.new_float()
+                string[] w3AllL = array.new_string()
+
+                float[] w3Mults = array.from(1.0, w3ExtMult, 2.0, 2.618, 3.0, 3.618, 4.0, 4.236, 4.618)
+                string w3ExtLabel = str.tostring(math.round(w3ExtMult * 1000) / 10, "#.#") + "% W1"
+                string[] w3Names = array.from("100% W1", w3ExtLabel, "200% W1", "261.8% W1", "300% W1", "361.8% W1", "400% W1", "423.6% W1", "461.8% W1")
+                for i = 0 to array.size(w3Mults) - 1
+                    float tgt = calcProj(p2, p1, originP, array.get(w3Mults, i), dir0, useLogScale)
+                    array.push(w3AllP, tgt)
+                    array.push(w3AllL, array.get(w3Names, i))
+
+                int nW3 = array.size(w3AllP)
+                if nW3 > 1
+                    for i = 0 to nW3 - 2
+                        for j = 0 to nW3 - 2 - i
+                            if array.get(w3AllP, j) > array.get(w3AllP, j + 1)
+                                float tmpP = array.get(w3AllP, j)
+                                array.set(w3AllP, j, array.get(w3AllP, j + 1))
+                                array.set(w3AllP, j + 1, tmpP)
+                                string tmpL = array.get(w3AllL, j)
+                                array.set(w3AllL, j, array.get(w3AllL, j + 1))
+                                array.set(w3AllL, j + 1, tmpL)
+
+                float w3Ref = w3Done ? p3 : close
+
+                int abvIdx3 = -1
+                for i = 0 to nW3 - 1
+                    if array.get(w3AllP, i) > w3Ref
+                        abvIdx3 := i
+                        break
+
+                int[] w3Draw = array.new_int()
+                if abvIdx3 != -1
+                    for i = 1 to 3
+                        if abvIdx3 - i >= 0
+                            array.push(w3Draw, abvIdx3 - i)
+                    for i = 0 to 2
+                        if abvIdx3 + i < nW3
+                            array.push(w3Draw, abvIdx3 + i)
+                else
+                    for i = 1 to 6
+                        if nW3 - i >= 0
+                            array.push(w3Draw, nW3 - i)
+
+                // Position W3 fibs near the "(3)" projection box
+                int w3StepsAhead = (w1Done and not w2Done ? 1 : 0) + (w2Done and not w3Done ? 1 : 0)
+                int w3AnchorT = w2Done ? array.get(local_pt, sW2) : (w1Done ? array.get(local_pt, sW1) : bar_index)
+                int w3C = w3Done ? array.get(local_pt, sW3) : math.max(w3AnchorT, bar_index) + math.max(w3StepsAhead, 1) * projOffsetBars
+                int w3S = w3C
+                int w3E = w3C + 1
+                // Mark active W3 fib used for W4 calculation with (*)
+                if not w4Done
+                    float w3BestDist = 1e18
+                    int w3BestIdx = -1
+                    for si = 0 to nW3 - 1
+                        float d = math.abs(array.get(w3AllP, si) - p3)
+                        if d < w3BestDist
+                            w3BestDist := d
+                            w3BestIdx := si
+                    if w3BestIdx >= 0
+                        array.set(w3AllL, w3BestIdx, array.get(w3AllL, w3BestIdx) + " (*)")
+                        p3 := array.get(w3AllP, w3BestIdx)
+
+                color w3FibCol = isBull ? color.aqua : color.fuchsia
+                for idx in w3Draw
+                    float tgt3 = array.get(w3AllP, idx)
+                    string lbTxt3 = array.get(w3AllL, idx)
+                    array.push(_dl, line.new(w3S, tgt3, w3E, tgt3, color=color.new(w3FibCol, 40), style=line.style_dotted, width=1))
+                    array.push(_dlab, label.new(w3S - 1, tgt3, "", color=w3FibCol, style=label.style_label_center, textcolor=w3FibCol, size=fibLblSz))
+                    array.push(_dlab, label.new(w3S, tgt3, "W3: " + lbTxt3 + " (" + str.tostring(tgt3, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=w3FibCol, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
+
+            p3Star := p3
+            p3 := p3Orig
+
+            // ── W5 fib targets: full set with extensions, show only near W5 ──
+            if (w4Done or w3Done) and showW5Fibs
+                // Build all W5 targets
+                float[] w5AllP = array.new_float()
+                string[] w5AllL = array.new_string()
+
+                // Primary: multiples of W1 from W4
+                float[] w1Mults = array.from(0.618, 1.0, 1.618, 2.0, 2.236, 2.618, 3.0, 3.236, 3.618, 4.0, 4.236, 4.618)
+                string[] w1Names = array.from("61.8% W1", "100% W1", "161.8% W1", "200% W1", "223.6% W1", "261.8% W1", "300% W1", "323.6% W1", "361.8% W1", "400% W1", "423.6% W1", "461.8% W1")
+                for i = 0 to array.size(w1Mults) - 1
+                    float tgt = calcProj(p4, p1, originP, array.get(w1Mults, i), dir0, useLogScale)
+                    array.push(w5AllP, tgt)
+                    array.push(w5AllL, array.get(w1Names, i))
+
+                // Extended: 161.8% of W3 from W4
+                float ext161w3 = calcProj(p4, p3, p2, 1.618, dir0, useLogScale)
+                array.push(w5AllP, ext161w3)
+                array.push(w5AllL, "161.8% W3")
+
+                // Extended: 61.8% and 161.8% of W1-W3 net from W4
+                float ext618w13 = calcProj(p4, p3, originP, 0.618, dir0, useLogScale)
+                float ext161w13 = calcProj(p4, p3, originP, 1.618, dir0, useLogScale)
+                array.push(w5AllP, ext618w13)
+                array.push(w5AllL, "61.8% W1-3")
+                array.push(w5AllP, ext161w13)
+                array.push(w5AllL, "161.8% W1-3")
+
+                // Sort all by price
+                int nW5 = array.size(w5AllP)
+                if nW5 > 1
+                    for i = 0 to nW5 - 2
+                        for j = 0 to nW5 - 2 - i
+                            if array.get(w5AllP, j) > array.get(w5AllP, j + 1)
+                                float tmpP = array.get(w5AllP, j)
+                                array.set(w5AllP, j, array.get(w5AllP, j + 1))
+                                array.set(w5AllP, j + 1, tmpP)
+                                string tmpL = array.get(w5AllL, j)
+                                array.set(w5AllL, j, array.get(w5AllL, j + 1))
+                                array.set(w5AllL, j + 1, tmpL)
+
+                // Reference: W5 price if done, current close if projecting
+                float w5Ref = w5Done ? p5 : close
+
+                // Find the nearest index above reference
+                int abvIdx = -1
+                for i = 0 to nW5 - 1
+                    if array.get(w5AllP, i) > w5Ref
+                        abvIdx := i
+                        break
+
+                // Collect indices: show 3 below and 3 above reference
+                int[] w5Draw = array.new_int()
+                if abvIdx != -1
+                    for i = 1 to 3
+                        if abvIdx - i >= 0
+                            array.push(w5Draw, abvIdx - i)
+                    for i = 0 to 2
+                        if abvIdx + i < nW5
+                            array.push(w5Draw, abvIdx + i)
+                else
+                    for i = 1 to 6
+                        if nW5 - i >= 0
+                            array.push(w5Draw, nW5 - i)
+
+                // Draw the selected fib lines
+                // When projecting, position relative to W4 (matches drawProjectionLines origin)
+                // Position W5 fibs near the "(5)" projection box
+                int w5StepsAhead = (not w3Done ? 1 : 0) + (not w4Done ? 1 : 0) + 1
+                int w5AnchorT = w4Done ? array.get(local_pt, sW4) : (w3Done ? array.get(local_pt, sW3) : (w2Done ? array.get(local_pt, sW2) : bar_index))
+                int w5C = w5Done ? array.get(local_pt, sW5) : math.max(w5AnchorT, bar_index) + w5StepsAhead * projOffsetBars
+                int w5S = w5C
+                int w5E = w5C + 1
+                // Mark active W5 fib with (*)
+                float w5BestDist = 1e18
+                int w5BestIdx = -1
+                for si = 0 to nW5 - 1
+                    float d = math.abs(array.get(w5AllP, si) - p5)
+                    if d < w5BestDist
+                        w5BestDist := d
+                        w5BestIdx := si
+                if w5BestIdx >= 0
+                    array.set(w5AllL, w5BestIdx, array.get(w5AllL, w5BestIdx) + " (*)")
+
+                color w5Col = isBull ? color.lime : color.orange
+                for idx in w5Draw
+                    float tgt = array.get(w5AllP, idx)
+                    string lbTxt = array.get(w5AllL, idx)
+                    array.push(_dl, line.new(w5S, tgt, w5E, tgt, color=color.new(w5Col, 40), style=line.style_dotted, width=1))
+                    array.push(_dlab, label.new(w5S - 1, tgt, "", color=w5Col, style=label.style_label_center, textcolor=w5Col, size=fibLblSz))
+                    array.push(_dlab, label.new(w5S, tgt, "W5: " + lbTxt + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=w5Col, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
+
+            // ── W5 confirmation: price retraced 38.2% of W4→W5 ──
+            if isValidMotive and w5Done and sW5 > sW4 and sW5 < sz
+                float w5RetLvl = calcProj(p5, p5, p4, 0.382, -dir0, useLogScale)
+                bool w5Confirmed = false
+                if dir0 > 0
+                    w5Confirmed := close < w5RetLvl
+                else
+                    w5Confirmed := close > w5RetLvl
+                if w5Confirmed
+                    label.set_text(lbl_w5, "(5) ✓ / X / A")
+
+            // ═══════════════════════════════════════════════════════════════
+            // CORRECTIVE A-B-C — PROPER EW STATISTICS
+            // ═══════════════════════════════════════════════════════════════
+            // Wave A: 38.2% → 50% → 61.8% of impulse (break minor → major)
+            // Wave B (Zigzag): 50% → 61.8% → 76.4% → 85.4% retrace of A
+            //   (Flat patterns: B can retrace 90%-138% of A)
+            // Wave C: 61.8% → 100% → 123.6% → 161.8% of A length
+            // Overall: correction often ends near Wave 4 territory
+            //
+            // Conservative: A starts at 38.2%
+            // Aggressive:   A starts at 50%
+            // Auto: starts at 38.2%, switches to 50% if price breaks 38.2%
+            // ═══════════════════════════════════════════════════════════════
+            float pa = originP
+            float pb = originP
+            float pc = originP
+            if w5Done
+                // ─── Precompute all Wave A fib levels of full impulse ───
+                float aLvl_382 = calcProj(p5, p5, originP, 0.382, -dir0, useLogScale)
+                float aLvl_500 = calcProj(p5, p5, originP, 0.500, -dir0, useLogScale)
+                float aLvl_618 = calcProj(p5, p5, originP, 0.618, -dir0, useLogScale)
+
+                // ─── Determine effective correction mode ───
+                bool useAggressive = false
+                if corrMode == "Aggressive"
+                    useAggressive := true
+                else if corrMode == "Auto"
+                    // If price has broken past 38.2%, escalate to aggressive
+                    if dir0 > 0
+                        if close < aLvl_382
+                            useAggressive := true
+                    else
+                        if close > aLvl_382
+                            useAggressive := true
+
+                // ─── Wave A: cascading targets (break minor → major) ───
+                if useAggressive
+                    // Aggressive starts at 50%
+                    pa := aLvl_500
+                    if dir0 > 0
+                        if close < aLvl_500
+                            pa := aLvl_618
+                    else
+                        if close > aLvl_500
+                            pa := aLvl_618
+                else
+                    // Conservative starts at 38.2%
+                    pa := aLvl_382
+                    if dir0 > 0
+                        if close < aLvl_382
+                            pa := aLvl_500
+                        if close < aLvl_500
+                            pa := aLvl_618
+                    else
+                        if close > aLvl_382
+                            pa := aLvl_500
+                        if close > aLvl_500
+                            pa := aLvl_618
+
+                // ─── CLAMP A: cannot be milder than the current price ───
+                // A represents the correction extreme so far.
+                // It must sit at or beyond the current close (the low point for bullish).
+                if dir0 > 0
+                    pa := math.min(pa, close)
+                else
+                    pa := math.max(pa, close)
+
+                // ─── Wave B: retrace from A (*) back toward W5 ───
+                float bt_a = calcProj(pa, p5, pa, 0.500, dir0, useLogScale)
+                float bt_b = calcProj(pa, p5, pa, 0.618, dir0, useLogScale)
+                float bt_c = calcProj(pa, p5, pa, 0.764, dir0, useLogScale)
+                pb := selectNearest3(bt_a, bt_b, bt_c, close, dir0)
+
+                // ─── Wave C: extension from B (*) ───
+                float ct_a = calcProj(pb, p5, pa, 0.618, -dir0, useLogScale)
+                float ct_b = calcProj(pb, p5, pa, 1.0, -dir0, useLogScale)
+                float ct_c = calcProj(pb, p5, pa, 1.618, -dir0, useLogScale)
+                pc := selectNearestRetrace3(ct_a, ct_b, ct_c, close, dir0)
+
+            if not w1Done
+                fibPoint1 := originP, fibPoint2 := p1, fibPoint3 := originP, isDown := dir0 < 0
+            // W2/W3/W4/W5 + ABC: rolling fibs handle all targets — no generic Ret/Ext needed
+
+            if not w1Done
+                array.push(fut_p, p1), array.push(fut_l, "(1)")
+            if not w2Done
+                array.push(fut_p, p2), array.push(fut_l, "(2)")
+            if not w3Done
+                array.push(fut_p, p3Star), array.push(fut_l, "(3)")
+            if not w4Done
+                array.push(fut_p, p4), array.push(fut_l, "(4)")
+            if not w5Done
+                array.push(fut_p, p5), array.push(fut_l, "(5)")
+
+            if w5Done
+                array.push(fut_p, pa), array.push(fut_l, "A")
+                array.push(fut_p, pb), array.push(fut_l, "B")
+                array.push(fut_p, pc), array.push(fut_l, "C")
+
+            // ═══════════════════════════════════════════════════════════════
+            // ROLLING FIB TARGETS — W2, W3, W4, A, B, C
+            // ═══════════════════════════════════════════════════════════════
+            // Set projection origin for this branch
+            if w5Done
+                int lastIdx = sW5
+                if sW5 + 3 < sz
+                    lastIdx := sW5 + 3
+                else if sW5 + 2 < sz
+                    lastIdx := sW5 + 2
+                else if sW5 + 1 < sz
+                    lastIdx := sW5 + 1
+                projStartP := array.get(local_px, lastIdx)
+                projStartT := array.get(local_pt, lastIdx)
+            else if w4Done
+                projStartP := array.get(local_px, sW4)
+                projStartT := array.get(local_pt, sW4)
+            else if w3Done
+                projStartP := array.get(local_px, sW3)
+                projStartT := array.get(local_pt, sW3)
+            else if w2Done
+                projStartP := array.get(local_px, sW2)
+                projStartT := array.get(local_pt, sW2)
+            else if w1Done
+                projStartP := array.get(local_px, sW1)
+                projStartT := array.get(local_pt, sW1)
+            // For each projected wave, compute EW fib targets and show
+            // only the 3 above + 3 below current price (hide if too far)
+            // W5 targets are handled separately above (full extension set)
+            // ═══════════════════════════════════════════════════════════════
+            if showW5Fibs and array.size(fut_l) > 0
+                // Clamp start to current bar so rolling fib boxes always appear in the future
+                int fibStartT = math.max(projStartT, bar_index)
+                // Track the actual (*) values from each wave to pass to the next
+                float w1Star = p1
+                float w2Star = p2
+                float w3Star = p3
+                float w4Star = p4
+                float w5Star = p5
+                float paStar = pa
+                float pbStar = pb
+                for fi = 0 to array.size(fut_l) - 1
+                    string wName = array.get(fut_l, fi)
+                    int wPos = fibStartT + (fi + 1) * projOffsetBars
+                    int wS = wPos
+                    int wE = wPos + 1
+
+                    // Wave prefix for labels
+                    string wPfx = wName == "(1)" ? "W1" : wName == "(2)" ? "W2" : wName == "(3)" ? "W3" : wName == "(4)" ? "W4" : wName == "(5)" ? "W5" : wName == "A" ? "W/A" : wName == "B" ? "W/B" : wName == "C" ? "W/C" : ""
+
+                    float[] wFibP = array.new_float()
+                    string[] wFibL = array.new_string()
+                    color wFibCol = color.gray
+
+                    if wName == "(2)"
+                        // W2: retrace of W1 (*) back toward origin
+                        float[] rm = array.from(0.382, 0.500, 0.618, 0.786, 0.886)
+                        string[] lm = array.from("38.2% (Shallow)", "50%", "61.8% (GP)", "78.6%", "88.6% (Deep)")
+                        for mi = 0 to array.size(rm) - 1
+                            array.push(wFibP, calcProj(w1Star, w1Star, originP, array.get(rm, mi), -dir0, useLogScale))
+                            array.push(wFibL, array.get(lm, mi))
+                        wFibCol := isBull ? color.orange : color.lime
+
+                    else if wName == "(3)"
+                        // W3: extension of W1 from W2 (*) — 1.0x to 4.618x
+                        float[] rm = array.from(1.0, 1.618, 2.0, 2.618, 3.0, 3.236, 3.618, 4.0, 4.236, 4.618)
+                        for m in rm
+                            array.push(wFibP, calcProj(w2Star, w1Star, originP, m, dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
+                        wFibCol := isBull ? color.lime : color.orange
+
+                    else if wName == "(4)"
+                        // W4: retrace of W3 (*) back toward W2
+                        // Typical 23.6%-38.2%, deep 50%-61.8%
+                        float[] rm = array.from(0.236, 0.382, 0.500, 0.618)
+                        for m in rm
+                            array.push(wFibP, calcProj(w3Star, w3Star, w2Star, m, -dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := isBull ? color.orange : color.lime
+
+                    else if wName == "A"
+                        // A: retrace of impulse from W5 (*) back toward origin
+                        float[] rm = array.from(0.382, 0.500, 0.618, 0.786)
+                        for m in rm
+                            array.push(wFibP, calcProj(w5Star, w5Star, originP, m, -dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := projBoxCounter
+
+                    else if wName == "B"
+                        // B: retrace from A (*) back toward W5
+                        float[] rm = array.from(0.500, 0.618, 0.764, 0.854, 1.0, 1.236)
+                        for m in rm
+                            array.push(wFibP, calcProj(paStar, p5, paStar, m, dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := projBoxWith
+
+                    else if wName == "C"
+                        // C: extension from B (*) using A move
+                        float[] rm = array.from(0.618, 1.0, 1.236, 1.618, 2.0, 2.618)
+                        for m in rm
+                            array.push(wFibP, calcProj(pbStar, p5, paStar, m, -dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
+                        wFibCol := projBoxCounter
+
+                    // Sort, filter to nearby, draw
+                    int nF = array.size(wFibP)
+                    if nF > 0
+                        if nF > 1
+                            for si = 0 to nF - 2
+                                for sj = 0 to nF - 2 - si
+                                    if array.get(wFibP, sj) > array.get(wFibP, sj + 1)
+                                        float tmpP2 = array.get(wFibP, sj)
+                                        array.set(wFibP, sj, array.get(wFibP, sj + 1))
+                                        array.set(wFibP, sj + 1, tmpP2)
+                                        string tmpL2 = array.get(wFibL, sj)
+                                        array.set(wFibL, sj, array.get(wFibL, sj + 1))
+                                        array.set(wFibL, sj + 1, tmpL2)
+
+                        // Find first level above close in sorted array
+                        int abvI = -1
+                        for si = 0 to nF - 1
+                            if array.get(wFibP, si) > close
+                                abvI := si
+                                break
+
+                        // Mark (*): the active fib used for next wave's calculation
+                        // Extensions (W1,W3,W5,C): start at lowest, cascade up when broken
+                        // Retracements (W2,W4,A,B): start at shallowest (lowest fib%), cascade deeper when broken
+                        bool isRetrace = (wName == "(2)" or wName == "(4)" or wName == "A" or wName == "B")
+                        int starIdx = -1
+                        if isRetrace
+                            // Scan from shallowest to deepest, pick first not broken
+                            // Bullish: shallowest = highest price (end of sorted array), broken = close < level
+                            // Bearish: shallowest = lowest price (start of sorted array), broken = close > level
+                            if dir0 > 0
+                                starIdx := 0  // default to deepest if all broken
+                                for si = nF - 1 to 0
+                                    if close > array.get(wFibP, si)
+                                        starIdx := si
+                                        break
+                            else
+                                starIdx := nF - 1  // default to deepest if all broken
+                                for si = 0 to nF - 1
+                                    if close < array.get(wFibP, si)
+                                        starIdx := si
+                                        break
+                        else
+                            // Extensions: start at lowest, cascade up when broken
+                            // Bullish: lowest = smallest price (start of sorted), broken = close > level
+                            // Bearish: lowest = highest price (end of sorted), broken = close < level
+                            if dir0 > 0
+                                starIdx := nF - 1  // default to highest if all broken
+                                for si = 0 to nF - 1
+                                    if close < array.get(wFibP, si)
+                                        starIdx := si
+                                        break
+                            else
+                                starIdx := 0  // default to lowest if all broken
+                                for si = nF - 1 to 0
+                                    if close > array.get(wFibP, si)
+                                        starIdx := si
+                                        break
+                        array.set(wFibL, starIdx, array.get(wFibL, starIdx) + " (*)")
+                        float starVal = array.get(wFibP, starIdx)
+                        if wName == "(1)"
+                            w1Star := starVal
+                        else if wName == "(2)"
+                            w2Star := starVal
+                        else if wName == "(3)"
+                            w3Star := starVal
+                        else if wName == "(4)"
+                            w4Star := starVal
+                        else if wName == "(5)"
+                            w5Star := starVal
+                        else if wName == "A"
+                            paStar := starVal
+                        else if wName == "B"
+                            pbStar := starVal
+
+                        int[] drawI = array.new_int()
+                        if abvI != -1
+                            for si = 1 to fibsBelowIn
+                                if abvI - si >= 0
+                                    array.push(drawI, abvI - si)
+                            for si = 0 to fibsAboveIn - 1
+                                if abvI + si < nF
+                                    array.push(drawI, abvI + si)
+                        else
+                            for si = 1 to math.min(fibsBelowIn + fibsAboveIn, nF)
+                                if nF - si >= 0
+                                    array.push(drawI, nF - si)
+
+                        for di in drawI
+                            float tgt = array.get(wFibP, di)
+                            string lbT = array.get(wFibL, di)
+                            array.push(_dl, line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1))
+                            array.push(_dlab, label.new(wS - 1, tgt, "", color=wFibCol, style=label.style_label_center, textcolor=wFibCol, size=fibLblSz))
+                            array.push(_dlab, label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
+
+        else
+            float pa = aDone ? array.get(local_px, sW3) : calcProj(originP, originP * 1.05, originP, 1.0, dir0, useLogScale)
+
+            float pb = originP
+            if bDone
+                pb := array.get(local_px, sW4)
+            else if aDone
+                float tb_500 = calcProj(pa, pa, originP, 0.500, -dir0, useLogScale)
+                float tb_618 = calcProj(pa, pa, originP, 0.618, -dir0, useLogScale)
+                float tb_786 = calcProj(pa, pa, originP, 0.786, -dir0, useLogScale)
+                pb := tb_500
+                if dir0 > 0
+                    if close < tb_500
+                        pb := tb_618
+                    if close < tb_618
+                        pb := tb_786
+                else
+                    if close > tb_500
+                        pb := tb_618
+                    if close > tb_618
+                        pb := tb_786
+
+            // fibPoints used internally for pc calculation, cleared after
+            if not aDone
+                fibPoint1 := originP, fibPoint2 := pa, fibPoint3 := originP, isDown := dir0 > 0
+            else if not bDone
+                fibPoint1 := originP, fibPoint2 := pa, fibPoint3 := pa, isDown := dir0 < 0
+            else
+                fibPoint1 := originP, fibPoint2 := pa, fibPoint3 := pb, isDown := dir0 > 0
+
+            float tc_100 = calcProj(fibPoint3, fibPoint2, fibPoint1, 1.000, isDown ? -1.0 : 1.0, useLogScale)
+            float tc_161 = calcProj(fibPoint3, fibPoint2, fibPoint1, 1.618, isDown ? -1.0 : 1.0, useLogScale)
+            float tc_261 = calcProj(fibPoint3, fibPoint2, fibPoint1, 2.618, isDown ? -1.0 : 1.0, useLogScale)
+            
+            float pc = tc_100
+            if cDone
+                pc := array.get(local_px, sW5)
+            else
+                if isDown
+                    if close < tc_100
+                        pc := tc_161
+                    if close < tc_161
+                        pc := tc_261
+                else
+                    if close > tc_100
+                        pc := tc_161
+                    if close > tc_161
+                        pc := tc_261
+
+            float dirOpp = -dir0
+            
+            float opp1 = calcProj(pc, pa, originP, 0.618, dirOpp, useLogScale)
+            if useLogScale
+                if math.abs(math.log(math.max(opp1, 1e-10)) - math.log(math.max(pc, 1e-10))) < 0.01
+                    opp1 := math.exp(math.log(math.max(pc, 1e-10)) + dirOpp * 0.01)
+            else
+                if math.abs(opp1 - pc) < (close * 0.01)
+                    opp1 := pc + dirOpp * (close * 0.01)
+
+            float opp2 = calcProj(opp1, opp1, pc, 0.500, -dirOpp, useLogScale)
+            float opp3 = calcProj(opp2, opp1, pc, 1.618, dirOpp, useLogScale)
+            float opp4 = calcProj(opp3, opp3, opp2, 0.382, -dirOpp, useLogScale)
+            float opp5 = calcProj(opp4, opp1, pc, 1.0, dirOpp, useLogScale)
+
+            // Clear fibPoints — rolling fibs handle all targets
+            fibPoint1 := na
+
+            // ── C fib targets: full set with extensions, show only near C ──
+            if bDone and showW5Fibs
+                float[] cAllP = array.new_float()
+                string[] cAllL = array.new_string()
+
+                // Primary: multiples of A from B
+                float[] cMults = array.from(0.618, 1.0, 1.236, 1.618, 2.0, 2.236, 2.618, 3.0, 3.618, 4.236)
+                string[] cNames = array.from("61.8% A", "100% A", "123.6% A", "161.8% A", "200% A", "223.6% A", "261.8% A", "300% A", "361.8% A", "423.6% A")
+                for i = 0 to array.size(cMults) - 1
+                    float tgt = calcProj(pb, pa, originP, array.get(cMults, i), dir0, useLogScale)
+                    array.push(cAllP, tgt)
+                    array.push(cAllL, array.get(cNames, i))
+
+                // Sort all by price
+                int nC = array.size(cAllP)
+                if nC > 1
+                    for i = 0 to nC - 2
+                        for j = 0 to nC - 2 - i
+                            if array.get(cAllP, j) > array.get(cAllP, j + 1)
+                                float tmpP = array.get(cAllP, j)
+                                array.set(cAllP, j, array.get(cAllP, j + 1))
+                                array.set(cAllP, j + 1, tmpP)
+                                string tmpL = array.get(cAllL, j)
+                                array.set(cAllL, j, array.get(cAllL, j + 1))
+                                array.set(cAllL, j + 1, tmpL)
+
+                // Reference: C price if done, current close if projecting
+                float cRef = cDone ? pc : close
+
+                // Find nearest index above reference
+                int cAbvIdx = -1
+                for i = 0 to nC - 1
+                    if array.get(cAllP, i) > cRef
+                        cAbvIdx := i
+                        break
+
+                // Collect indices: show 3 below and 3 above reference
+                int[] cDraw = array.new_int()
+                if cAbvIdx != -1
+                    for i = 1 to 3
+                        if cAbvIdx - i >= 0
+                            array.push(cDraw, cAbvIdx - i)
+                    for i = 0 to 2
+                        if cAbvIdx + i < nC
+                            array.push(cDraw, cAbvIdx + i)
+                else
+                    for i = 1 to 6
+                        if nC - i >= 0
+                            array.push(cDraw, nC - i)
+
+                int cC = cDone ? array.get(local_pt, sW5) : (bDone ? array.get(local_pt, sW4) + projOffsetBars : bar_index + projOffsetBars)
+                int cS = cC
+                int cE = cC + 1
+                color cCol = cDone ? (isBull ? color.blue : color.orange) : ongoingCol
+                for idx in cDraw
+                    float tgt = array.get(cAllP, idx)
+                    string lbTxt = array.get(cAllL, idx)
+                    array.push(_dl, line.new(cS, tgt, cE, tgt, color=color.new(cCol, 40), style=line.style_dotted, width=1))
+                    array.push(_dlab, label.new(cS - 1, tgt, "", color=cCol, style=label.style_label_center, textcolor=cCol, size=fibLblSz))
+                    array.push(_dlab, label.new(cS, tgt, "C: " + lbTxt + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=cCol, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
+
+            if not aDone
+                array.push(fut_p, pa), array.push(fut_l, "A")
+            if not bDone
+                array.push(fut_p, pb), array.push(fut_l, "B")
+            if not cDone
+                array.push(fut_p, pc), array.push(fut_l, "C")
+
+            array.push(fut_p, opp1), array.push(fut_l, "(1)")
+            array.push(fut_p, opp2), array.push(fut_l, "(2)")
+            array.push(fut_p, opp3), array.push(fut_l, "(3)")
+            array.push(fut_p, opp4), array.push(fut_l, "(4)")
+            array.push(fut_p, opp5), array.push(fut_l, "(5)")
+
+            // Set projection origin for ABC branch
+            if cDone
+                projStartP := array.get(local_px, sW5)
+                projStartT := array.get(local_pt, sW5)
+            else if bDone
+                projStartP := array.get(local_px, sW4)
+                projStartT := array.get(local_pt, sW4)
+            else if aDone
+                projStartP := array.get(local_px, sW3)
+                projStartT := array.get(local_pt, sW3)
+
+            // ── Rolling fibs for projected impulse after ABC ──
+            if showW5Fibs and array.size(fut_l) > 0
+                // Clamp start to current bar so rolling fib boxes always appear in the future
+                int fibStartT = math.max(projStartT, bar_index)
+                // Track (*) values to chain through waves
+                float opp1Star = opp1
+                float opp2Star = opp2
+                float opp3Star = opp3
+                float opp4Star = opp4
+                for fi = 0 to array.size(fut_l) - 1
+                    string wName = array.get(fut_l, fi)
+                    int wPos = fibStartT + (fi + 1) * projOffsetBars
+                    int wS = wPos
+                    int wE = wPos + 1
+                    string wPfx = wName == "(1)" ? "W1" : wName == "(2)" ? "W2" : wName == "(3)" ? "W3" : wName == "(4)" ? "W4" : wName == "(5)" ? "W5" : wName == "A" ? "W/A" : wName == "B" ? "W/B" : wName == "C" ? "W/C" : ""
+                    float[] wFibP = array.new_float()
+                    string[] wFibL = array.new_string()
+                    color wFibCol = color.gray
+
+                    if wName == "A"
+                        // A: extension of prior move from origin — 38.2% to 123.6%
+                        float[] rm = array.from(0.382, 0.500, 0.618, 0.786, 1.0, 1.236)
+                        for m in rm
+                            array.push(wFibP, calcProj(originP, pa, originP, m, dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := projBoxCounter
+
+                    else if wName == "B"
+                        // B: retracement of A — 50% to 123.6%
+                        float[] rm = array.from(0.500, 0.618, 0.764, 0.854, 1.0, 1.236)
+                        for m in rm
+                            array.push(wFibP, calcProj(pa, pa, originP, m, -dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := projBoxWith
+
+                    else if wName == "C"
+                        // C: extension of A from B — 61.8% to 261.8% of A
+                        float[] rm = array.from(0.618, 1.0, 1.236, 1.618, 2.0, 2.618)
+                        for m in rm
+                            array.push(wFibP, calcProj(pb, pa, originP, m, dir0, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
+                        wFibCol := projBoxCounter
+
+                    else if wName == "(1)"
+                        // W1: retraces 38.2%-61.8% of the entire preceding ABC correction
+                        float[] rm = array.from(0.382, 0.500, 0.618, 0.786)
+                        for m in rm
+                            array.push(wFibP, calcProj(pc, originP, pc, m, dirOpp, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := not isBull ? color.lime : color.orange
+                    else if wName == "(2)"
+                        float[] rm = array.from(0.382, 0.500, 0.618, 0.786)
+                        for m in rm
+                            array.push(wFibP, calcProj(opp1Star, opp1Star, pc, m, -dirOpp, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := not isBull ? color.orange : color.lime
+                    else if wName == "(3)"
+                        float[] rm = array.from(1.0, 1.618, 2.0, 2.236, 2.618, 3.0, 3.236, 3.618, 4.0)
+                        for m in rm
+                            array.push(wFibP, calcProj(opp2Star, opp1Star, pc, m, dirOpp, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x")
+                        wFibCol := not isBull ? color.lime : color.orange
+                    else if wName == "(4)"
+                        float[] rm = array.from(0.236, 0.382, 0.500, 0.618, 0.786)
+                        for m in rm
+                            array.push(wFibP, calcProj(opp3Star, opp3Star, opp2Star, m, -dirOpp, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "%")
+                        wFibCol := not isBull ? color.orange : color.lime
+                    else if wName == "(5)"
+                        // W5: multiples of W1 from W4 (*)
+                        float[] rm = array.from(0.618, 1.0, 1.618, 2.0, 2.618, 3.618)
+                        for m in rm
+                            array.push(wFibP, calcProj(opp4Star, opp1Star, pc, m, dirOpp, useLogScale))
+                            array.push(wFibL, str.tostring(math.round(m * 1000) / 10, "#.#") + "x W1")
+                        // 161.8% of W3 from W4 (*)
+                        array.push(wFibP, calcProj(opp4Star, opp3Star, opp2Star, 1.618, dirOpp, useLogScale))
+                        array.push(wFibL, "161.8% W3")
+                        // 61.8% and 161.8% of W1-3 net distance from W4 (*)
+                        array.push(wFibP, calcProj(opp4Star, opp3Star, pc, 0.618, dirOpp, useLogScale))
+                        array.push(wFibL, "61.8% W1-3")
+                        array.push(wFibP, calcProj(opp4Star, opp3Star, pc, 1.618, dirOpp, useLogScale))
+                        array.push(wFibL, "161.8% W1-3")
+                        wFibCol := not isBull ? color.lime : color.orange
+
+                    int nF = array.size(wFibP)
+                    if nF > 0
+                        if nF > 1
+                            for si = 0 to nF - 2
+                                for sj = 0 to nF - 2 - si
+                                    if array.get(wFibP, sj) > array.get(wFibP, sj + 1)
+                                        float tmpP2 = array.get(wFibP, sj)
+                                        array.set(wFibP, sj, array.get(wFibP, sj + 1))
+                                        array.set(wFibP, sj + 1, tmpP2)
+                                        string tmpL2 = array.get(wFibL, sj)
+                                        array.set(wFibL, sj, array.get(wFibL, sj + 1))
+                                        array.set(wFibL, sj + 1, tmpL2)
+                        int abvI = -1
+                        for si = 0 to nF - 1
+                            if array.get(wFibP, si) > close
+                                abvI := si
+                                break
+                        int[] drawI = array.new_int()
+                        if abvI != -1
+                            for si = 1 to fibsBelowIn
+                                if abvI - si >= 0
+                                    array.push(drawI, abvI - si)
+                            for si = 0 to fibsAboveIn - 1
+                                if abvI + si < nF
+                                    array.push(drawI, abvI + si)
+                        else
+                            for si = 1 to math.min(fibsBelowIn + fibsAboveIn, nF)
+                                if nF - si >= 0
+                                    array.push(drawI, nF - si)
+                        for di in drawI
+                            float tgt = array.get(wFibP, di)
+                            string lbT = array.get(wFibL, di)
+                            array.push(_dl, line.new(wS, tgt, wE, tgt, color=color.new(wFibCol, 40), style=line.style_dotted, width=1))
+                            array.push(_dlab, label.new(wS - 1, tgt, "", color=wFibCol, style=label.style_label_center, textcolor=wFibCol, size=fibLblSz))
+                            array.push(_dlab, label.new(wS, tgt, wPfx + ": " + lbT + " (" + str.tostring(tgt, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_right, textcolor=wFibCol, size=fibLblSz, text_font_family=font.family_monospace, textalign=text.align_left))
+
+        //activeProjStyle = projStyleIn == "Solid" ? line.style_solid : projStyleIn == "Dotted" ? line.style_dotted : line.style_dashed
+        activeProjStyle = projStyleIn == "Solid" ? line.style_solid : projStyleIn == "Dashed" ? line.style_dashed : line.style_dotted
+        activeBoxSize = projBoxSzIn == "Normal" ? size.normal : projBoxSzIn == "Small" ? size.small : projBoxSzIn == "Large" ? size.large : size.tiny
+
+        // projStartP/T already set by the motive or ABC branch above
+        // Clamp start to current bar so projection boxes always appear in the future
+        drawProjectionLines(projStartP, math.max(projStartT, bar_index), colorProj, activeProjStyle, close, projBoxWith, projBoxCounter, activeBoxSize, isBull, projOffsetBars, _dl, _dlab)
+
+        int extStartT = bar_index + math.max(1, fibOffsetBars - 70) 
+        int extEndT = bar_index + fibOffsetBars
+
+        if showW5Fibs and not na(fibPoint1)
+            float[] fibSet = array.from(-1.618, -1.0, -0.618, -0.382, 0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.236, 1.272, 1.618, 2.0, 2.236, 2.618, 3.618, 4.236, 5.0)
+              
+            float[] allPrices = array.new_float()
+            float[] allFibs = array.new_float()
+            
+            float logP1 = math.log(fibPoint1)
+            float logP2 = math.log(fibPoint2)
+            float logP3 = math.log(fibPoint3)
+            float logLen = math.abs(logP1 - logP2)
+            float linLen = math.abs(fibPoint1 - fibPoint2)
+            
+            for fib in fibSet
+                float p = na
+                if useLogScale
+                    float tLog = isDown ? (logP3 - fib * logLen) : (logP3 + fib * logLen)
+                    p := math.exp(tLog)
+                else
+                    p := isDown ? (fibPoint3 - fib * linLen) : (fibPoint3 + fib * linLen)
+                array.push(allPrices, p)
+                array.push(allFibs, fib)
+                
+            int n = array.size(allPrices)
+            if n > 1
+                for i = 0 to n - 2
+                    for j = 0 to n - 2 - i
+                        if array.get(allPrices, j) > array.get(allPrices, j + 1)
+                            float tempP = array.get(allPrices, j)
+                            array.set(allPrices, j, array.get(allPrices, j + 1))
+                            array.set(allPrices, j + 1, tempP)
+                            
+                            float tempF = array.get(allFibs, j)
+                            array.set(allFibs, j, array.get(allFibs, j + 1))
+                            array.set(allFibs, j + 1, tempF)
+                
+            int aboveIdx = -1
+            for i = 0 to array.size(allPrices) - 1
+                if array.get(allPrices, i) > close
+                    aboveIdx := i
+                    break
+                    
+            int[] indicesToDraw = array.new_int()
+            
+            if aboveIdx != -1
+                for i = 1 to fibsBelowIn
+                    if aboveIdx - i >= 0
+                        array.push(indicesToDraw, aboveIdx - i)
+                
+                for i = 0 to fibsAboveIn - 1
+                    if aboveIdx + i < array.size(allPrices)
+                        array.push(indicesToDraw, aboveIdx + i)
+            else
+                int lenFibs = array.size(allPrices)
+                for i = 1 to (fibsBelowIn + fibsAboveIn)
+                    if lenFibs - i >= 0
+                        array.push(indicesToDraw, lenFibs - i)
+            
+            for idx in indicesToDraw
+                float p = array.get(allPrices, idx)
+                float f = array.get(allFibs, idx)
+                
+                string fibPrefix = (f > 0.0 and f < 1.0) ? "Ret " : "Ext "
+                color fibCol = f > 1.0 ? color.new(color.teal, 0) : f == 1.0 ? color.new(color.silver, 0) : color.new(color.fuchsia, 0)
+                
+                array.push(_dl, line.new(extStartT, p, extEndT, p, color=color.new(fibCol, 40), style=line.style_dotted, width=1))
+                array.push(_dlab, label.new(extEndT - 1, p, "", color=fibCol, style=label.style_label_center, textcolor=fibCol, size=size.tiny))
+                array.push(_dlab, label.new(extEndT, p, fibPrefix + str.tostring(f) + " (" + str.tostring(p, "#.##") + ")", color=color.new(color.gray, 100), style=label.style_label_left, textcolor=fibCol, size=size.tiny, text_font_family=font.family_monospace, textalign=text.align_left))
+
+        // ─── CONFLUENCE TARGETS MATRIX (Daily MAs & BBs) ───
+        drawConfluenceLine(showMA5, ma5, extStartT, extEndT, "D-MA(" + str.tostring(lenMA5) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA10, ma10, extStartT, extEndT, "D-MA(" + str.tostring(lenMA10) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA20, ma20, extStartT, extEndT, "D-MA(" + str.tostring(lenMA20) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA55, ma55, extStartT, extEndT, "D-MA(" + str.tostring(lenMA55) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showMA200, ma200, extStartT, extEndT, "D-MA(" + str.tostring(lenMA200) + ")", colMA, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showWMA40, wma40, extStartT, extEndT, "W-MA(" + str.tostring(lenWMA40) + ")", colMA, activeConfStyle, _dl, _dlab)
+
+        int bbExtStartT = bar_index + math.max(1, bbOffsetBars - 25)
+        int bbExtEndT = bar_index + bbOffsetBars
+        drawConfluenceLine(showBB, bbUp, bbExtStartT, bbExtEndT, "BB Upper(" + str.tostring(lenBB) + ")", colBB, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showBB, bbMid, bbExtStartT, bbExtEndT, "BB Basis(" + str.tostring(lenBB) + ")", colBB, activeConfStyle, _dl, _dlab)
+        drawConfluenceLine(showBB, bbLow, bbExtStartT, bbExtEndT, "BB Lower(" + str.tostring(lenBB) + ")", colBB, activeConfStyle, _dl, _dlab)
+
+        if showVolMA and not na(volMA) and not na(bbLow)
+            int volStartT = bar_index + math.max(1, volHOffset - 25)
+            int volEndT = bar_index + volHOffset
+            float volY = bbLow - (atrVal * volVAtr)
+            drawConfluenceLine(true, volY, volStartT, volEndT, "Vol MA(" + str.tostring(lenVolMA) + "): " + str.tostring(volMA, format.volume), colVol, activeConfStyle, _dl, _dlab)
+
+        if showTable
+            table tbl = table.new(position.bottom_right, 4, 14, border_width=1, border_color=color.new(color.gray, 60), frame_width=2, frame_color=color.new(color.gray, 40))
+            hdrBg = color.new(#1a1a2e, 10)
+            table.cell(tbl, 0, 0, "Target",   bgcolor=hdrBg, text_color=color.white, text_size=tblSz)
+            table.cell(tbl, 1, 0, "Label",  bgcolor=hdrBg, text_color=color.white, text_size=tblSz)
+            table.cell(tbl, 2, 0, "Price", bgcolor=hdrBg, text_color=color.white, text_size=tblSz)
+            table.cell(tbl, 3, 0, "% Chg",  bgcolor=hdrBg, text_color=color.white, text_size=tblSz)
+
+            table.cell(tbl, 0, 1, "Depth:", bgcolor=color.new(#2196F3, 80), text_color=color.white, text_size=tblSzSm)
+            table.cell(tbl, 1, 1, str.tostring(bestDepth), bgcolor=color.new(#2196F3, 80), text_color=color.white, text_size=tblSz)
+            table.cell(tbl, 2, 1, "Score:", bgcolor=color.new(#2196F3, 80), text_color=color.white, text_size=tblSzSm)
+            table.cell(tbl, 3, 1, str.tostring(bestScore, "#"), bgcolor=color.new(#2196F3, 80), text_color=color.white, text_size=tblSz)
+
+            int tblRow = 2
+            if array.size(fut_p) > 0
+                for i = 0 to array.size(fut_p) - 1
+                    if tblRow >= 14
+                        break
+                    lb = array.get(fut_l, i)
+                    if lb != ""
+                        tp = array.get(fut_p, i)
+                        rowBg = tblRow == 2 ? color.new(colorProj, 60) : color.new(color.gray, 95)
+                        txtCol = tblRow == 2 ? color.white : color.new(color.gray, 30)
+                        
+                        priceStr = str.tostring(tp, "#.##")
+                        pctChg = close != 0 ? ((tp - close) / close) * 100.0 : 0.0
+                        pctStr = (pctChg >= 0 ? "+" : "") + str.tostring(math.round(pctChg * 10) / 10, "#.#") + "%"
+                        pctCol = pctChg >= 0 ? color.new(color.green, 20) : color.new(color.red, 20)
+
+                        table.cell(tbl, 0, tblRow, tblRow == 2 ? "> Target" : "Target", bgcolor=rowBg, text_color=txtCol, text_size=tblSzSm)
+                        table.cell(tbl, 1, tblRow, lb,      bgcolor=rowBg, text_color=txtCol, text_size=tblSz)
+                        table.cell(tbl, 2, tblRow, priceStr, bgcolor=rowBg, text_color=txtCol, text_size=tblSzSm)
+                        table.cell(tbl, 3, tblRow, pctStr,  bgcolor=rowBg, text_color=pctCol, text_size=tblSzSm)
+                        tblRow += 1
