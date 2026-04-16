@@ -1,0 +1,430 @@
+// This work is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International  
+// https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+
+
+//@version=6
+indicator("Supply and Demand Zones 2026-2", overlay = true)
+
+
+// ＩＮＰＵＴＳ ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――{
+col_supply = input.color(color.rgb(192, 199, 98, 36), "Supply")
+col_demand = input.color(color.rgb(99, 226, 243), "Demand")
+_atr = input.int(200, "ATR Length", minval = 1) 
+no_lvl = input.int(10, "Number of Level to Display", minval = 1) 
+_atr_mult = input.float(0.618, "ATR Length Multiplier", minval = 0) 
+//_atr_base_mult = input.float(0.5, "Base ATR Multiplier (For RBR/RDB/DBD/DBE with ATR Mode)", minval = 0.1)
+mode3_impulse_mult = input.float(0.368, "Mode 3 (RBR/RDB/DBD/DBE w/ ATR): Impulse ATR Multiplier", minval=0.1, group="Mode 3 Settings", tooltip="Minimum size for a Rally/Drop")
+mode3_base_mult    = input.float(1.0, "Mode 3 (RBR/RDB/DBD/DBE  w /ATR): Base ATR Multiplier", minval=0.1, group="Mode 3 Settings", tooltip="Maximum size for a Base")
+ 
+// --- RBD (Rally-Base-Drop), DBD (Drop-Base-Drop), RBR (Rally-Base-Rally), and DBE/DBR (Drop-Base-Rally). ---
+//use_patterns  = input.bool(true, "Use RBD/DBD/RBR/DBR Patterns (Overrides 3-Candle)")
+detection_mode = input.string("Classic Patterns (Body %)", "Detection Mode", options=["Original 3-Candle", "Classic Patterns (Body %)", "ATR-Filtered Patterns"])
+baseThreshold = input.float(1.000, title="Base Candle Max Body %", minval=0.01, maxval=1.0, group="Pattern Settings")
+ercThreshold  = input.float(0.100, title="Rally/Drop Min Body %", minval=0.01, maxval=1.0, group="Pattern Settings")
+
+// NEW: Parameter to control how many levels to use for the Total Delta calculation
+delta_calc_lvls = input.int(5, "Levels to Use for Total Delta Dashboard", minval = 1, group="Dashboard Settings")
+merge_threshold = input.float(0.5, "Zone Merge Threshold %", minval=0.0, group="Zone Merge Settings", tooltip="If two zones of the same type are within this % of price from each other, keep only the one tested the least.")
+
+var vol        = array.new<float>()
+var bear_boxes = array.new<box>()
+var bull_boxes = array.new<box>()
+var BullDelta  = array.new<float>()
+var BearDelta  = array.new<float>()
+var BearTests  = array.new<int>()   // # of bars price has been inside each supply zone
+var BullTests  = array.new<int>()   // # of bars price has been inside each demand zone
+
+var count_bear = 0
+var count_bull = 0
+// }
+
+
+// ＣＡＬＣＵＬＡＴＩＯＮＳ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――{
+vol.push(volume)
+
+if vol.size() > 1000
+    vol.shift()
+
+
+extra_vol = volume > vol.avg()
+//atr = ta.atr(_atr) * _atr_mult
+atr_val = ta.atr(_atr)
+atr = atr_val * _atr_mult
+//atr_base = atr_val * _atr_base_mult
+atr_impulse_m3 = atr_val * mode3_impulse_mult
+atr_base_m3    = atr_val * mode3_base_mult
+
+bear_candle = close < open 
+bull_candle = close > open
+
+// --- RBD (Rally-Base-Drop), DBD (Drop-Base-Drop), RBR (Rally-Base-Rally), and DBE/DBR (Drop-Base-Rally) Calculations ---
+candleRange = high - low == 0 ? 0.0001 : high - low
+candleBody  = math.abs(close - open)
+bodyPercent = candleBody / candleRange
+
+//isBase  = bodyPercent <= baseThreshold
+//isRally = bull_candle and bodyPercent >= ercThreshold
+//isDrop  = bear_candle and bodyPercent >= ercThreshold
+ 
+//isRBR = isRally[2] and isBase[1] and isRally[0]
+//isDBR = isDrop[2]  and isBase[1] and isRally[0]
+//isRBD = isRally[2] and isBase[1] and isDrop[0]
+//isDBD = isDrop[2]  and isBase[1] and isDrop[0]
+
+// --- MODE 1: Original 3-Candle Logic ---
+orig_supply = bear_candle and bear_candle[1] and bear_candle[2] and extra_vol[1]
+orig_demand = bull_candle and bull_candle[1] and bull_candle[2] and extra_vol[1]
+ 
+// --- MODE 2: Classic Patterns (Body % Only) ---
+isBase_class  = bodyPercent <= baseThreshold
+isRally_class = bull_candle and bodyPercent >= ercThreshold
+isDrop_class  = bear_candle and bodyPercent >= ercThreshold
+ 
+isRBR_class = isRally_class[2] and isBase_class[1] and isRally_class[0]
+isDBR_class = isDrop_class[2]  and isBase_class[1] and isRally_class[0]
+isRBD_class = isRally_class[2] and isBase_class[1] and isDrop_class[0]
+isDBD_class = isDrop_class[2]  and isBase_class[1] and isDrop_class[0]
+ 
+// --- MODE 3: ATR-Filtered Patterns (Body % + ATR Size) ---
+//isBase_atr  = bodyPercent <= baseThreshold and candleRange < atr_base
+//isRally_atr = bull_candle and bodyPercent >= ercThreshold and candleRange > atr
+//isDrop_atr  = bear_candle and bodyPercent >= ercThreshold and candleRange > atr
+
+isBase_atr  = bodyPercent <= baseThreshold and candleRange < atr_base_m3
+isRally_atr = bull_candle and bodyPercent >= ercThreshold and candleRange > atr_impulse_m3
+isDrop_atr  = bear_candle and bodyPercent >= ercThreshold and candleRange > atr_impulse_m3
+ 
+isRBR_atr = isRally_atr[2] and isBase_atr[1] and isRally_atr[0]
+isDBR_atr = isDrop_atr[2]  and isBase_atr[1] and isRally_atr[0]
+isRBD_atr = isRally_atr[2] and isBase_atr[1] and isDrop_atr[0]
+isDBD_atr = isDrop_atr[2]  and isBase_atr[1] and isDrop_atr[0]
+
+//classic_supply = bear_candle and bear_candle[1] and bear_candle[2] and extra_vol[1] and count_bear == 0
+//classic_demand = bull_candle and bull_candle[1] and bull_candle[2] and extra_vol[1] and count_bull == 0
+
+//trigger_supply = use_patterns ? (isRBD or isDBD) : classic_supply and count_bear == 0
+//trigger_demand = use_patterns ? (isRBR or isDBR) : classic_demand and count_bull == 0
+
+// --- ROUTER: Select the logic based on the dropdown menu ---
+trigger_supply_raw = detection_mode == "Original 3-Candle" ? orig_supply : detection_mode == "Classic Patterns (Body %)" ? (isRBD_class or isDBD_class) : (isRBD_atr or isDBD_atr)
+trigger_demand_raw = detection_mode == "Original 3-Candle" ? orig_demand : detection_mode == "Classic Patterns (Body %)" ? (isRBR_class or isDBR_class) : (isRBR_atr or isDBR_atr)
+
+// Apply the 15-bar cooldown to whichever mode was selected
+trigger_supply = trigger_supply_raw and count_bear == 0
+trigger_demand = trigger_demand_raw and count_bull == 0
+
+
+//if bear_candle and bear_candle[1] and bear_candle[2] and  extra_vol[1] and count_bear == 0
+if trigger_supply
+
+    delta = 0.
+
+    if detection_mode == "Classic Patterns (Body %)"
+        // Base candle is always at index 1 in the 3-candle pattern (rally/drop[2] - base[1] - drop[0])
+        delta += bear_candle[0] ? -volume[0] : volume[0]
+        delta += bear_candle[1] ? -volume[1] : volume[1]
+        delta += bear_candle[2] ? -volume[2] : volume[2]
+        count_bear := 1
+        bear_boxes.push(box.new(bar_index-1, high[1], bar_index, low[1], bgcolor = color(na), border_color = col_supply, border_width = 2, text = "Supply: " + str.tostring(delta, format.volume), text_halign = text.align_right, text_size = size.normal))
+        BearDelta.push(delta)
+        BearTests.push(0)
+    else
+        for i = 0 to no_lvl
+            if bull_candle[i]
+                count_bear := 1
+                bear_boxes.push(box.new(bar_index-i, low[i]+atr, bar_index, low[i], bgcolor = color(na), border_color = col_supply, border_width = 2, text = "Supply: " + str.tostring(delta, format.volume), text_halign = text.align_right, text_size = size.normal))
+                BearDelta.push(delta)
+                BearTests.push(0)
+                break
+            delta += bear_candle[i] ? -volume[i] : volume[i]
+        
+
+if count_bear >= 1
+    count_bear += 1
+
+if count_bear >= 15
+    count_bear:= 0
+
+
+
+//if bull_candle and bull_candle[1] and bull_candle[2] and  extra_vol[1] and count_bull == 0
+if trigger_demand
+
+    delta = 0.
+
+    if detection_mode == "Classic Patterns (Body %)"
+        // Base candle is always at index 1 in the 3-candle pattern (drop/rally[2] - base[1] - rally[0])
+        delta += bull_candle[0] ? volume[0] : -volume[0]
+        delta += bull_candle[1] ? volume[1] : -volume[1]
+        delta += bull_candle[2] ? volume[2] : -volume[2]
+        count_bull := 1
+        bull_boxes.push(box.new(bar_index-1, high[1], bar_index, low[1], bgcolor = color(na), border_color = col_demand, border_width = 2, text = "Demand: " + str.tostring(delta, format.volume), text_halign = text.align_right, text_size = size.normal))
+        BullDelta.push(delta)
+        BullTests.push(0)
+    else
+        for i = 0 to no_lvl
+            if bear_candle[i]
+                count_bull := 1
+                bull_boxes.push(box.new(bar_index-i, high[i], bar_index, high[i]-atr, bgcolor = color(na), border_color = col_demand, border_width = 2, text = "Demand: " + str.tostring(delta, format.volume), text_halign = text.align_right, text_size = size.normal))
+                BullDelta.push(delta)
+                BullTests.push(0)
+                break
+            delta += bull_candle[i] ? volume[i] : -volume[i]
+
+if count_bull >= 1
+    count_bull += 1
+
+if count_bull >= 15
+    count_bull:= 0
+
+
+
+for b in bear_boxes
+
+    i = bear_boxes.indexof(b)
+
+    buy = 0.
+    sell = 0.
+
+
+    for bb in BullDelta
+        buy += math.abs(bb)
+    for ss in BearDelta
+        sell += math.abs(ss)
+
+    tot = buy + sell
+
+
+    b.set_text("S: " + str.tostring(BearDelta.get(i), format.volume) + " | " + str.tostring(math.abs(BearDelta.get(i) / tot * 100), format.percent))
+
+    // Set the text size (New line added)
+    b.set_text_size(size.tiny)
+
+    b.set_right(bar_index+100)
+    b.set_extend(extend.right)
+    top = b.get_top()
+    bot = b.get_bottom()
+    b.set_bgcolor(color.new(col_supply, 75))
+
+    if close > top
+        int del_idx = bear_boxes.indexof(b)
+        b.delete()
+        bear_boxes.remove(del_idx)
+        BearDelta.remove(del_idx)
+        BearTests.remove(del_idx)
+        continue
+
+    if (b.get_right() - b.get_left()-15) > 20
+        if high > bot and low < bot
+            b.set_border_style(line.style_dotted)
+            b.set_border_width(1)
+            BearTests.set(i, BearTests.get(i) + 1)
+
+// Merge supply zones that overlap or are within the threshold % — pick the closest pair first
+if bear_boxes.size() > 1
+    float min_gap = merge_threshold
+    int   mi      = -1
+    int   mj      = -1
+    for i = 0 to bear_boxes.size() - 2
+        float top_i = bear_boxes.get(i).get_top()
+        float bot_i = bear_boxes.get(i).get_bottom()
+        for j = i + 1 to bear_boxes.size() - 1
+            float top_j = bear_boxes.get(j).get_top()
+            float bot_j = bear_boxes.get(j).get_bottom()
+            float upper_bot = math.max(bot_i, bot_j)
+            float lower_top = math.min(top_i, top_j)
+            float gap_pct   = (upper_bot - lower_top) / close * 100
+            if gap_pct <= min_gap
+                min_gap := gap_pct
+                mi      := i
+                mj      := j
+    if mi >= 0
+        box   lvl_i     = bear_boxes.get(mi)
+        box   lvl_j     = bear_boxes.get(mj)
+        float new_top   = math.max(lvl_i.get_top(),    lvl_j.get_top())
+        float new_bot   = math.min(lvl_i.get_bottom(), lvl_j.get_bottom())
+        float new_delta = BearDelta.get(mi) + BearDelta.get(mj)
+        int   new_tests = math.max(BearTests.get(mi),  BearTests.get(mj))
+        lvl_i.set_top(new_top)
+        lvl_i.set_bottom(new_bot)
+        BearDelta.set(mi, new_delta)
+        BearTests.set(mi, new_tests)
+        lvl_j.delete()
+        bear_boxes.remove(mj)
+        BearDelta.remove(mj)
+        BearTests.remove(mj)
+
+
+if bear_boxes.size() > no_lvl
+    // Remove most-tested zone; on tie remove the one closest to another zone (most redundant)
+    int   rm_max_tests_b = -1
+    float rm_min_gap_b   = 999999.0
+    int   rm_idx_b       = 0
+    for k = 0 to bear_boxes.size() - 1
+        int   tk    = BearTests.get(k)
+        float top_k = bear_boxes.get(k).get_top()
+        float bot_k = bear_boxes.get(k).get_bottom()
+        float near  = 999999.0
+        for m = 0 to bear_boxes.size() - 1
+            if m == k
+                continue
+            float top_m = bear_boxes.get(m).get_top()
+            float bot_m = bear_boxes.get(m).get_bottom()
+            float lbot  = math.min(top_k, top_m)
+            if lbot > 0
+                float g = (math.max(bot_k, bot_m) - lbot) / lbot * 100
+                if g < near
+                    near := g
+        if tk > rm_max_tests_b or (tk == rm_max_tests_b and near < rm_min_gap_b)
+            rm_max_tests_b := tk
+            rm_min_gap_b   := near
+            rm_idx_b       := k
+    bear_boxes.get(rm_idx_b).delete()
+    bear_boxes.remove(rm_idx_b)
+    BearDelta.remove(rm_idx_b)
+    BearTests.remove(rm_idx_b)
+
+
+
+for b in  bull_boxes
+
+    i = bull_boxes.indexof(b)
+
+    buy = 0.
+    sell = 0.
+
+    for bb in BullDelta
+        buy += math.abs(bb)
+    for ss in BearDelta
+        sell += math.abs(ss)
+
+    tot = buy + sell
+
+    b.set_text("D: " + str.tostring(BullDelta.get(i), format.volume) + " | " + str.tostring(BullDelta.get(i) / tot * 100, format.percent))
+    // Set the text size (New line added)
+    b.set_text_size(size.tiny)
+
+    b.set_right(bar_index+100)
+    b.set_extend(extend.right)
+    bot = b.get_bottom()
+    top = b.get_top()
+    b.set_bgcolor(color.new(col_demand, 75))
+
+    if close < bot
+        int del_idx = bull_boxes.indexof(b)
+        b.delete()
+        bull_boxes.remove(del_idx)
+        BullDelta.remove(del_idx)
+        BullTests.remove(del_idx)
+        continue
+
+    if (b.get_right() - b.get_left()-15) > 20
+        if low < top and high > top
+            b.set_border_style(line.style_dotted)
+            b.set_border_width(1)
+            BullTests.set(i, BullTests.get(i) + 1)
+
+
+// Merge demand zones that overlap or are within the threshold % — pick the closest pair first
+if bull_boxes.size() > 1
+    float min_gap = merge_threshold
+    int   mi      = -1
+    int   mj      = -1
+    for i = 0 to bull_boxes.size() - 2
+        float top_i = bull_boxes.get(i).get_top()
+        float bot_i = bull_boxes.get(i).get_bottom()
+        for j = i + 1 to bull_boxes.size() - 1
+            float top_j = bull_boxes.get(j).get_top()
+            float bot_j = bull_boxes.get(j).get_bottom()
+            float upper_bot = math.max(bot_i, bot_j)
+            float lower_top = math.min(top_i, top_j)
+            float gap_pct   = (upper_bot - lower_top) / close * 100
+            if gap_pct <= min_gap
+                min_gap := gap_pct
+                mi      := i
+                mj      := j
+    if mi >= 0
+        box   lvl_i     = bull_boxes.get(mi)
+        box   lvl_j     = bull_boxes.get(mj)
+        float new_top   = math.max(lvl_i.get_top(),    lvl_j.get_top())
+        float new_bot   = math.min(lvl_i.get_bottom(), lvl_j.get_bottom())
+        float new_delta = BullDelta.get(mi) + BullDelta.get(mj)
+        int   new_tests = math.max(BullTests.get(mi),  BullTests.get(mj))
+        lvl_i.set_top(new_top)
+        lvl_i.set_bottom(new_bot)
+        BullDelta.set(mi, new_delta)
+        BullTests.set(mi, new_tests)
+        lvl_j.delete()
+        bull_boxes.remove(mj)
+        BullDelta.remove(mj)
+        BullTests.remove(mj)
+
+
+if bull_boxes.size() > no_lvl
+    // Remove most-tested zone; on tie remove the one closest to another zone (most redundant)
+    int   rm_max_tests_u = -1
+    float rm_min_gap_u   = 999999.0
+    int   rm_idx_u       = 0
+    for k = 0 to bull_boxes.size() - 1
+        int   tk    = BullTests.get(k)
+        float top_k = bull_boxes.get(k).get_top()
+        float bot_k = bull_boxes.get(k).get_bottom()
+        float near  = 999999.0
+        for m = 0 to bull_boxes.size() - 1
+            if m == k
+                continue
+            float top_m = bull_boxes.get(m).get_top()
+            float bot_m = bull_boxes.get(m).get_bottom()
+            float lbot  = math.min(top_k, top_m)
+            if lbot > 0
+                float g = (math.max(bot_k, bot_m) - lbot) / lbot * 100
+                if g < near
+                    near := g
+        if tk > rm_max_tests_u or (tk == rm_max_tests_u and near < rm_min_gap_u)
+            rm_max_tests_u := tk
+            rm_min_gap_u   := near
+            rm_idx_u       := k
+    bull_boxes.get(rm_idx_u).delete()
+    bull_boxes.remove(rm_idx_u)
+    BullDelta.remove(rm_idx_u)
+    BullTests.remove(rm_idx_u)
+
+
+// --- CUSTOM FORMATTING FUNCTION ---
+f_format_large_num(val) =>
+    float abs_val = math.abs(val)
+    string res = ""
+    if abs_val >= 1000000
+        res := str.tostring(math.round(val / 1000000)) + "M"
+    else if abs_val >= 1000
+        res := str.tostring(math.round(val / 1000)) + "K"
+    else
+        // If the number is smaller than 1000, keep up to 2 decimal places
+        res := str.tostring(math.round(val * 100) / 100) 
+    res
+
+// --- NEW: FUNCTION TO SUM LAST N ELEMENTS OF AN ARRAY ---
+f_sum_last_n(arr, n) =>
+    float sum = 0.0
+    int sz = array.size(arr)
+    if sz > 0
+        // Determine the starting index to only grab the most recent 'n' elements
+        int start_idx = math.max(0, sz - n)
+        for i = start_idx to sz - 1
+            sum += array.get(arr, i)
+    sum
+
+
+// --- DASHBOARD DISPLAY ---
+var dash = table.new(position.top_center, 10, 10, chart.bg_color)
+if barstate.islast
+
+    dash.cell(0, 0, "TS:", text_halign = text.align_left, text_color = col_supply, text_size = size.tiny)
+    dash.cell(0, 1, "TD:", text_halign = text.align_left, text_color = col_demand, text_size = size.tiny)
+
+    // Applied the helper function to sum only the last 'delta_calc_lvls' before formatting
+    dash.cell(1, 0, f_format_large_num(f_sum_last_n(BearDelta, delta_calc_lvls)), text_color = col_supply, text_size = size.tiny)
+    dash.cell(1, 1, f_format_large_num(f_sum_last_n(BullDelta, delta_calc_lvls)), text_color = col_demand, text_size = size.tiny)
+
+// }

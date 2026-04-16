@@ -1,0 +1,47 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "tradingview": {
+      "type": "local",
+      "command": [
+        "node",
+        "/Users/mdao/Repositories/Tradingview/tradingview-mcp/src/server.js"
+      ],
+      "enabled": true,
+      "timeout": 10000
+    },
+    "zai-mcp-server": {
+      "type": "local",
+      "command": ["npx", "-y", "@z_ai/mcp-server"],
+      "environment": {
+        "Z_AI_API_KEY": "f1ab9f8805434869bbdbdb29e3636f7d.mvR19AFZ7bALda6E",
+        "Z_AI_MODE": "ZAI"
+      },
+      "enabled": true
+    },
+    "web-search-prime": {
+      "type": "remote",
+      "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
+      "headers": {
+        "Authorization": "Bearer f1ab9f8805434869bbdbdb29e3636f7d.mvR19AFZ7bALda6E"
+      },
+      "enabled": true
+    },
+    "web-reader": {
+      "type": "remote",
+      "url": "https://api.z.ai/api/mcp/web_reader/mcp",
+      "headers": {
+        "Authorization": "Bearer f1ab9f8805434869bbdbdb29e3636f7d.mvR19AFZ7bALda6E"
+      },
+      "enabled": true
+    },
+    "zread": {
+      "type": "remote",
+      "url": "https://api.z.ai/api/mcp/zread/mcp",
+      "headers": {
+        "Authorization": "Bearer f1ab9f8805434869bbdbdb29e3636f7d.mvR19AFZ7bALda6E"
+      },
+      "enabled": true
+    }
+  }
+}

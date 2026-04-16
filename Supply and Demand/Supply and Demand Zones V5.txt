@@ -1,0 +1,323 @@
+// This work is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International  
+// https://creativecommons.org/licenses/by-nc-sa/4.0/
+// © BigBeluga
+
+
+
+//@version=6
+indicator("Supply and Demand Zones 2026-1", overlay = true)
+
+
+// ＩＮＰＵＴＳ ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――{
+col_supply = input.color(color.rgb(192, 199, 98, 36), "Supply")
+col_demand = input.color(color.rgb(99, 226, 243), "Demand")
+_atr = input.int(40, "ATR Length", minval = 1) 
+no_lvl = input.int(10, "Number of Level to Display", minval = 1) 
+_atr_mult = input.float(0.618, "ATR Length Multiplier", minval = 0) 
+//_atr_base_mult = input.float(0.5, "Base ATR Multiplier (For RBR/RDB/DBD/DBE with ATR Mode)", minval = 0.1)
+mode3_impulse_mult = input.float(0.368, "Mode 3 (RBR/RDB/DBD/DBE w/ ATR): Impulse ATR Multiplier", minval=0.1, group="Mode 3 Settings", tooltip="Minimum size for a Rally/Drop")
+mode3_base_mult    = input.float(1.0, "Mode 3 (RBR/RDB/DBD/DBE  w /ATR): Base ATR Multiplier", minval=0.1, group="Mode 3 Settings", tooltip="Maximum size for a Base")
+ 
+// --- RBD (Rally-Base-Drop), DBD (Drop-Base-Drop), RBR (Rally-Base-Rally), and DBE/DBR (Drop-Base-Rally). ---
+//use_patterns  = input.bool(true, "Use RBD/DBD/RBR/DBR Patterns (Overrides 3-Candle)")
+detection_mode = input.string("Classic Patterns (Body %)", "Detection Mode", options=["Original 3-Candle", "Classic Patterns (Body %)", "ATR-Filtered Patterns"])
+baseThreshold = input.float(0.768, title="Base Candle Max Body %", minval=0.01, maxval=1.0, group="Pattern Settings")
+ercThreshold  = input.float(0.368, title="Rally/Drop Min Body %", minval=0.01, maxval=1.0, group="Pattern Settings")
+
+// NEW: Parameter to control how many levels to use for the Total Delta calculation
+delta_calc_lvls = input.int(5, "Levels to Use for Total Delta Dashboard", minval = 1, group="Dashboard Settings")
+
+var vol        = array.new<float>()
+var bear_boxes = array.new<box>()
+var bull_boxes = array.new<box>()
+var BullDelta  = array.new<float>()
+var BearDelta  = array.new<float>()
+
+var count_bear = 0
+var count_bull = 0
+// }
+
+
+// ＣＡＬＣＵＬＡＴＩＯＮＳ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――{
+vol.push(volume)
+
+if vol.size() > 1000
+    vol.shift()
+
+
+extra_vol = volume > vol.avg()
+//atr = ta.atr(_atr) * _atr_mult
+atr_val = ta.atr(_atr)
+atr = atr_val * _atr_mult
+//atr_base = atr_val * _atr_base_mult
+atr_impulse_m3 = atr_val * mode3_impulse_mult
+atr_base_m3    = atr_val * mode3_base_mult
+
+bear_candle = close < open 
+bull_candle = close > open
+
+// --- RBD (Rally-Base-Drop), DBD (Drop-Base-Drop), RBR (Rally-Base-Rally), and DBE/DBR (Drop-Base-Rally) Calculations ---
+candleRange = high - low == 0 ? 0.0001 : high - low
+candleBody  = math.abs(close - open)
+bodyPercent = candleBody / candleRange
+
+//isBase  = bodyPercent <= baseThreshold
+//isRally = bull_candle and bodyPercent >= ercThreshold
+//isDrop  = bear_candle and bodyPercent >= ercThreshold
+ 
+//isRBR = isRally[2] and isBase[1] and isRally[0]
+//isDBR = isDrop[2]  and isBase[1] and isRally[0]
+//isRBD = isRally[2] and isBase[1] and isDrop[0]
+//isDBD = isDrop[2]  and isBase[1] and isDrop[0]
+
+// --- MODE 1: Original 3-Candle Logic ---
+orig_supply = bear_candle and bear_candle[1] and bear_candle[2] and extra_vol[1]
+orig_demand = bull_candle and bull_candle[1] and bull_candle[2] and extra_vol[1]
+ 
+// --- MODE 2: Classic Patterns (Body % Only) ---
+isBase_class  = bodyPercent <= baseThreshold
+isRally_class = bull_candle and bodyPercent >= ercThreshold
+isDrop_class  = bear_candle and bodyPercent >= ercThreshold
+ 
+isRBR_class = isRally_class[2] and isBase_class[1] and isRally_class[0]
+isDBR_class = isDrop_class[2]  and isBase_class[1] and isRally_class[0]
+isRBD_class = isRally_class[2] and isBase_class[1] and isDrop_class[0]
+isDBD_class = isDrop_class[2]  and isBase_class[1] and isDrop_class[0]
+ 
+// --- MODE 3: ATR-Filtered Patterns (Body % + ATR Size) ---
+//isBase_atr  = bodyPercent <= baseThreshold and candleRange < atr_base
+//isRally_atr = bull_candle and bodyPercent >= ercThreshold and candleRange > atr
+//isDrop_atr  = bear_candle and bodyPercent >= ercThreshold and candleRange > atr
+
+isBase_atr  = bodyPercent <= baseThreshold and candleRange < atr_base_m3
+isRally_atr = bull_candle and bodyPercent >= ercThreshold and candleRange > atr_impulse_m3
+isDrop_atr  = bear_candle and bodyPercent >= ercThreshold and candleRange > atr_impulse_m3
+ 
+isRBR_atr = isRally_atr[2] and isBase_atr[1] and isRally_atr[0]
+isDBR_atr = isDrop_atr[2]  and isBase_atr[1] and isRally_atr[0]
+isRBD_atr = isRally_atr[2] and isBase_atr[1] and isDrop_atr[0]
+isDBD_atr = isDrop_atr[2]  and isBase_atr[1] and isDrop_atr[0]
+
+//classic_supply = bear_candle and bear_candle[1] and bear_candle[2] and extra_vol[1] and count_bear == 0
+//classic_demand = bull_candle and bull_candle[1] and bull_candle[2] and extra_vol[1] and count_bull == 0
+
+//trigger_supply = use_patterns ? (isRBD or isDBD) : classic_supply and count_bear == 0
+//trigger_demand = use_patterns ? (isRBR or isDBR) : classic_demand and count_bull == 0
+
+// --- ROUTER: Select the logic based on the dropdown menu ---
+trigger_supply_raw = detection_mode == "Original 3-Candle" ? orig_supply : detection_mode == "Classic Patterns (Body %)" ? (isRBD_class or isDBD_class) : (isRBD_atr or isDBD_atr)
+trigger_demand_raw = detection_mode == "Original 3-Candle" ? orig_demand : detection_mode == "Classic Patterns (Body %)" ? (isRBR_class or isDBR_class) : (isRBR_atr or isDBR_atr)
+
+// Apply the 15-bar cooldown to whichever mode was selected
+trigger_supply = trigger_supply_raw and count_bear == 0
+trigger_demand = trigger_demand_raw and count_bull == 0
+
+
+//if bear_candle and bear_candle[1] and bear_candle[2] and  extra_vol[1] and count_bear == 0
+if trigger_supply
+
+    delta = 0.
+
+    for i = 0 to no_lvl
+        
+        if bull_candle[i]
+            count_bear := 1
+            bear_boxes.push(box.new(bar_index-i, low[i]+atr, bar_index, low[i], bgcolor = color(na), border_color = col_supply, border_width = 2, text = "Supply: " + str.tostring(delta, format.volume), text_halign = text.align_right, text_size = size.normal))
+            BearDelta.push(delta)
+            break
+        delta += bear_candle[i] ? -volume[i] : volume[i]
+        
+
+if count_bear >= 1
+    count_bear += 1
+
+if count_bear >= 15
+    count_bear:= 0
+
+
+
+//if bull_candle and bull_candle[1] and bull_candle[2] and  extra_vol[1] and count_bull == 0
+if trigger_demand 
+
+    delta = 0.
+
+    for i = 0 to no_lvl
+        if bear_candle[i]
+            count_bull := 1
+            bull_boxes.push(box.new(bar_index-i, high[i], bar_index, high[i]-atr, bgcolor = color(na), border_color = col_demand, border_width = 2, text = "Demand: " + str.tostring(delta, format.volume), text_halign = text.align_right, text_size = size.normal))
+            BullDelta.push(delta)
+            break
+        delta += bull_candle[i] ? volume[i] : -volume[i]
+
+if count_bull >= 1
+    count_bull += 1
+
+if count_bull >= 15
+    count_bull:= 0
+
+
+
+for b in bear_boxes
+
+    i = bear_boxes.indexof(b)
+
+    buy = 0.
+    sell = 0.
+
+
+    for bb in BullDelta
+        buy += math.abs(bb)
+    for ss in BearDelta
+        sell += math.abs(ss)
+
+    tot = buy + sell
+
+
+    b.set_text("S: " + str.tostring(BearDelta.get(i), format.volume) + " | " + str.tostring(math.abs(BearDelta.get(i) / tot * 100), format.percent))
+
+    // Set the text size (New line added)
+    b.set_text_size(size.tiny)
+
+    b.set_right(bar_index+100)
+    b.set_extend(extend.right)
+    top = b.get_top()
+    bot = b.get_bottom()
+    b.set_bgcolor(color.new(col_supply, 75))
+
+    if close > top 
+        b.delete()
+
+        bear_boxes.remove(bear_boxes.indexof(b))
+        BearDelta.remove(bear_boxes.indexof(b))
+
+    if (b.get_right() - b.get_left()-15) > 20
+        if high > bot and low < bot 
+            b.set_border_style(line.style_dotted)
+            b.set_border_width(1)
+
+if bear_boxes.size() > 0
+    for i = 0 to bear_boxes.size() - 1
+        lvl = bear_boxes.get(i)
+        top = lvl.get_top()
+        bot = lvl.get_bottom()
+
+        for j = 0 to bear_boxes.size() - 1
+            if i == j
+                continue  // Don't compare with self
+
+            l   = bear_boxes.get(j)
+
+            top1 = l.get_top()
+            bot1 = l.get_bottom()
+
+            if top1 < top and top1 > bot
+                lvl.delete()
+                bear_boxes.remove(bear_boxes.indexof(lvl))
+                BearDelta.remove(bear_boxes.indexof(lvl))
+
+
+if bear_boxes.size()> no_lvl 
+    bear_boxes.shift().delete()
+    BearDelta.shift()
+
+
+
+for b in  bull_boxes
+
+    i = bull_boxes.indexof(b)
+
+    buy = 0.
+    sell = 0.
+
+    for bb in BullDelta
+        buy += math.abs(bb)
+    for ss in BearDelta
+        sell += math.abs(ss)
+
+    tot = buy + sell
+
+    b.set_text("D: " + str.tostring(BullDelta.get(i), format.volume) + " | " + str.tostring(BullDelta.get(i) / tot * 100, format.percent))
+    // Set the text size (New line added)
+    b.set_text_size(size.tiny)
+
+    b.set_right(bar_index+100)
+    b.set_extend(extend.right)
+    bot = b.get_bottom()
+    top = b.get_top()
+    b.set_bgcolor(color.new(col_demand, 75))
+
+    if close < bot 
+        b.delete()
+
+        bull_boxes.remove(bull_boxes.indexof(b))
+        BullDelta.remove(bull_boxes.indexof(b))
+
+    if (b.get_right() - b.get_left()-15) > 20
+        if low < top and high > top 
+            b.set_border_style(line.style_dotted)
+            b.set_border_width(1)
+
+
+if bull_boxes.size() > 0
+    for i = 0 to bull_boxes.size() - 1
+        lvl = bull_boxes.get(i)
+        top = lvl.get_top()
+        bot = lvl.get_bottom()
+
+        for j = 0 to bull_boxes.size() - 1
+            if i == j
+                continue  
+
+            l   = bull_boxes.get(j)
+
+            top1 = l.get_top()
+            bot1 = l.get_bottom()
+
+            if bot1 < top and bot1 > bot
+                lvl.delete()
+                bull_boxes.remove(bull_boxes.indexof(lvl))
+                BullDelta.remove(bull_boxes.indexof(lvl))
+
+
+if bull_boxes.size()> no_lvl 
+    bull_boxes.shift().delete()
+    BullDelta.shift()
+
+
+// --- CUSTOM FORMATTING FUNCTION ---
+f_format_large_num(val) =>
+    float abs_val = math.abs(val)
+    string res = ""
+    if abs_val >= 1000000
+        res := str.tostring(math.round(val / 1000000)) + "M"
+    else if abs_val >= 1000
+        res := str.tostring(math.round(val / 1000)) + "K"
+    else
+        // If the number is smaller than 1000, keep up to 2 decimal places
+        res := str.tostring(math.round(val * 100) / 100) 
+    res
+
+// --- NEW: FUNCTION TO SUM LAST N ELEMENTS OF AN ARRAY ---
+f_sum_last_n(arr, n) =>
+    float sum = 0.0
+    int sz = array.size(arr)
+    if sz > 0
+        // Determine the starting index to only grab the most recent 'n' elements
+        int start_idx = math.max(0, sz - n)
+        for i = start_idx to sz - 1
+            sum += array.get(arr, i)
+    sum
+
+
+// --- DASHBOARD DISPLAY ---
+var dash = table.new(position.top_center, 10, 10, chart.bg_color)
+if barstate.islast
+
+    dash.cell(0, 0, "TS:", text_halign = text.align_left, text_color = col_supply, text_size = size.tiny)
+    dash.cell(0, 1, "TD:", text_halign = text.align_left, text_color = col_demand, text_size = size.tiny)
+
+    // Applied the helper function to sum only the last 'delta_calc_lvls' before formatting
+    dash.cell(1, 0, f_format_large_num(f_sum_last_n(BearDelta, delta_calc_lvls)), text_color = col_supply, text_size = size.tiny)
+    dash.cell(1, 1, f_format_large_num(f_sum_last_n(BullDelta, delta_calc_lvls)), text_color = col_demand, text_size = size.tiny)
+
+// }

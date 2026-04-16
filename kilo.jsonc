@@ -1,0 +1,11 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "tradingview": {
+      "type": "local",
+      "command": ["node", "/Users/mdao/Repositories/Tradingview/tradingview-mcp/src/server.js"],
+      "enabled": true,
+      "timeout": 10000
+    }
+  }
+}

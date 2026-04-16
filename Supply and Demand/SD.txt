@@ -1,0 +1,24 @@
+How does supply & demand indicator work?
+
+Our supply & demand indicator will use a simple formula based on price action to plot the zones. It will plot the zone on the base candles using the high and low of the base zone.
+
+Base candle = a candlestick that has a small body and big shadows like a Doji candlestick.
+Big candle = a candlestick with a large body and small shadows.
+
+The zone will be drawn on the high and low of the base candlestick. There can be more than one base candlesticks in the base zone, but our indicator will identify the maximum of 4 base candlesticks.
+
+Rally (R): A bullish candle with a large body (e.g., close > open and body size > average).
+Drop (D): A bearish candle with a large body (e.g., close < open and body size > average).
+Base (B): A small-bodied candle (e.g., abs(close - open) < smallRangeThreshold). 
+
+Pattern Logic:
+RBR: Rally -> Base -> Rally (Bullish continuation).
+DBD: Drop -> Base -> Drop (Bearish continuation).
+DBR: Drop -> Base -> Rally (Bullish reversal/demand zone).
+RBD (or DBE): Rally -> Base -> Drop (Bearish reversal/supply zone).
+
+FEATURES
+
+Specify desired Big Body Candle Size Percentage
+Specify desired Small Body Candle Size Percentage
+
